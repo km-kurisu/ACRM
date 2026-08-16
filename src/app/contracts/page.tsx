@@ -163,7 +163,7 @@ export default function ContractsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Contracts</h1>
@@ -289,7 +289,7 @@ export default function ContractsPage() {
         </Dialog>
       </div>
 
-      <Card className="glass">
+      <Card className="glass flex min-h-0 flex-1 flex-col">
         <CardHeader>
           <div className="flex items-center gap-2">
             <Search className="size-4 text-muted-foreground" />
@@ -301,10 +301,10 @@ export default function ContractsPage() {
             />
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div className="min-h-0 flex-1 overflow-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="pl-6">Creator</TableHead>
                   <TableHead>Type</TableHead>

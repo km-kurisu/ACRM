@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Handshake, Megaphone, FileText, Sparkles, Menu } from "lucide-react";
+import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,8 +14,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/creators", label: "Creators", icon: Users },
-  { href: "/companies", label: "Companies", icon: Building2 },
+  { href: "/master-data", label: "Master Data", icon: Database },
   { href: "/deals", label: "Deals", icon: Handshake },
   { href: "/outreach", label: "Outreach", icon: Megaphone },
   { href: "/contracts", label: "Contracts", icon: FileText },
@@ -125,7 +124,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className="flex min-h-screen flex-col md:pl-64">
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 lg:px-8">{children}</main>
+        <main className="flex w-full flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">{children}</main>
 
         <footer className="border-t border-border/40">
           <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:px-6">
