@@ -168,8 +168,9 @@ export default function MasterDataPage() {
     return value != null && value > 0 ? value.toLocaleString() : "—";
   }
 
-  function yesNo(value: boolean | null | undefined) {
+  function yesNo(value: boolean | string | null | undefined) {
     if (value == null) return "—";
+    if (typeof value === "string") return value === "Yes" ? "Yes" : "No";
     return value ? "Yes" : "No";
   }
 
@@ -196,9 +197,9 @@ export default function MasterDataPage() {
         primary_content_type: form.primary_content_type || null,
         languages: form.languages || null,
         interested_in_exclusive_mgmt: (form.interested_in_exclusive_mgmt || null) as Creator["interested_in_exclusive_mgmt"],
-        rate_card_received: form.rate_card_received,
-        gst_available: form.gst_available,
-        payment_details_received: form.payment_details_received,
+        rate_card_received: form.rate_card_received ? "Yes" : "No",
+        gst_available: form.gst_available ? "Yes" : "No",
+        payment_details_received: form.payment_details_received ? "Yes" : "No",
         priority: (form.priority || null) as Creator["priority"],
         assigned_manager: form.assigned_manager || null,
         notes: form.notes || null,
@@ -546,9 +547,9 @@ export default function MasterDataPage() {
                                 primary_content_type: row.primary_content_type ?? "",
                                 languages: row.languages ?? "",
                                 interested_in_exclusive_mgmt: row.interested_in_exclusive_mgmt ?? "No",
-                                rate_card_received: row.rate_card_received ?? false,
-                                gst_available: row.gst_available ?? false,
-                                payment_details_received: row.payment_details_received ?? false,
+                                rate_card_received: row.rate_card_received === "Yes",
+                                gst_available: row.gst_available === "Yes",
+                                payment_details_received: row.payment_details_received === "Yes",
                                 priority: row.priority ?? "Medium",
                                 assigned_manager: row.assigned_manager ?? "",
                                 notes: row.notes ?? "",

@@ -8,6 +8,14 @@ function fail(error: { message?: string } | null): never {
   throw new Error(error?.message || "Database error");
 }
 
+function revalidateAll() {
+  revalidatePath("/dashboard");
+  revalidatePath("/master-data");
+  revalidatePath("/outreach");
+  revalidatePath("/contracts");
+  revalidatePath("/deals");
+}
+
 export type DashboardStat = { label: string; value: number };
 
 export type OutreachWithCreator = Outreach & { creators: CreatorSummary | null };
@@ -40,19 +48,19 @@ export async function listCreatorSummaries(): Promise<CreatorSummary[]> {
 export async function createCreator(input: Partial<Creator>) {
   const { error } = await db.from("creators").insert([input]);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function updateCreator(id: string, input: Partial<Creator>) {
   const { error } = await db.from("creators").update(input).eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function deleteCreator(id: string) {
   const { error } = await db.from("creators").delete().eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 // ---------- Companies ----------
@@ -72,19 +80,19 @@ export async function listCompanySummaries(): Promise<CompanySummary[]> {
 export async function createCompany(input: Partial<Company>) {
   const { error } = await db.from("companies").insert([input]);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function updateCompany(id: string, input: Partial<Company>) {
   const { error } = await db.from("companies").update(input).eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function deleteCompany(id: string) {
   const { error } = await db.from("companies").delete().eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 // ---------- Deals ----------
@@ -98,19 +106,19 @@ export async function listDeals(): Promise<DealWithRefs[]> {
 export async function createDeal(input: Partial<Deal>) {
   const { error } = await db.from("deals").insert([input]);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function updateDeal(id: string, input: Partial<Deal>) {
   const { error } = await db.from("deals").update(input).eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function deleteDeal(id: string) {
   const { error } = await db.from("deals").delete().eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 // ---------- Outreach ----------
@@ -124,19 +132,19 @@ export async function listOutreach(): Promise<OutreachWithCreator[]> {
 export async function createOutreach(input: Partial<Outreach>) {
   const { error } = await db.from("outreach").insert([input]);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function updateOutreach(id: string, input: Partial<Outreach>) {
   const { error } = await db.from("outreach").update(input).eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function deleteOutreach(id: string) {
   const { error } = await db.from("outreach").delete().eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 // ---------- Contracts ----------
@@ -150,19 +158,19 @@ export async function listContracts(): Promise<ContractWithCreator[]> {
 export async function createContract(input: Partial<Contract>) {
   const { error } = await db.from("contracts").insert([input]);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function updateContract(id: string, input: Partial<Contract>) {
   const { error } = await db.from("contracts").update(input).eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 export async function deleteContract(id: string) {
   const { error } = await db.from("contracts").delete().eq("id", id);
   if (error) fail(error);
-  revalidatePath("/dashboard");
+  revalidateAll();
 }
 
 // ---------- Master Data ----------

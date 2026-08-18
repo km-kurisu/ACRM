@@ -52,10 +52,8 @@ const EMPTY: OutreachForm = {
 const STATUS_COLORS: Record<string, string> = {
   Negotiating: "bg-foreground/10 text-foreground",
   Interested: "bg-foreground/10 text-foreground",
-  "Meeting Scheduled": "bg-foreground/15 text-foreground",
   "Not Interested": "bg-muted text-muted-foreground line-through",
   "No Response": "bg-muted text-muted-foreground",
-  Signed: "bg-foreground/10 text-foreground",
 };
 
 export default function OutreachPage() {
@@ -221,7 +219,6 @@ export default function OutreachPage() {
                     <option value="Email">Email</option>
                     <option value="Instagram">Instagram</option>
                     <option value="WhatsApp">WhatsApp</option>
-                    <option value="Phone">Phone</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
@@ -236,9 +233,7 @@ export default function OutreachPage() {
                     <option value="No Response">No Response</option>
                     <option value="Interested">Interested</option>
                     <option value="Negotiating">Negotiating</option>
-                    <option value="Meeting Scheduled">Meeting Scheduled</option>
                     <option value="Not Interested">Not Interested</option>
-                    <option value="Signed">Signed</option>
                   </select>
                 </div>
               </div>

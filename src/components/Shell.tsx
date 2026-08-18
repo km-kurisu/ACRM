@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database } from "lucide-react";
+import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Toaster } from "@/components/ui/sonner";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -30,9 +31,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border/40 bg-background/60 backdrop-blur-xl md:flex">
         <div className="flex h-16 items-center gap-2 border-b border-border/40 px-6">
-          <BrandMark />
+          <Origami />
           <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-            Moodly CRM
+            AniCRM
           </Link>
         </div>
 
@@ -67,7 +68,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <Separator />
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-muted-foreground">Account</span>
+            <span className="text-sm text-muted-foreground">Profile</span>
             <UserButton />
           </div>
         </div>
@@ -86,7 +87,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
                   <BrandMark />
-                  <span>Moodly CRM</span>
+                  <span>AniCRM</span>
                 </SheetTitle>
               </SheetHeader>
               <nav className="mt-6 flex flex-col gap-1">
@@ -110,7 +111,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 })}
               </nav>
               <div className="mt-6 flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
-                <span className="text-sm text-muted-foreground">Account</span>
+                <span className="text-sm text-muted-foreground">Profile</span>
                 <UserButton />
               </div>
             </SheetContent>
@@ -130,9 +131,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:px-6">
             <div className="flex items-center gap-2">
               <Sparkles className="size-4" />
-              <span>Moodly CRM — Anime Creator Agency</span>
+              <span>AniCRM — Anime Creator Agency</span>
             </div>
-            <span>© {new Date().getFullYear()} Moodly CRM</span>
+            <span>© {new Date().getFullYear()} AniCRM</span>
           </div>
         </footer>
       </div>

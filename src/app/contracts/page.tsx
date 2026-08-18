@@ -36,7 +36,7 @@ type ContractForm = {
   start_date: string;
   end_date: string;
   exclusivity: string;
-  renewal_reminder: boolean;
+  renewal_reminder: string;
   notes: string;
 };
 
@@ -47,7 +47,7 @@ const EMPTY: ContractForm = {
   start_date: "",
   end_date: "",
   exclusivity: "No",
-  renewal_reminder: false,
+  renewal_reminder: "",
   notes: "",
 };
 
@@ -130,7 +130,7 @@ export default function ContractsPage() {
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         exclusivity: form.exclusivity || null,
-        renewal_reminder: form.renewal_reminder,
+        renewal_reminder: form.renewal_reminder || null,
         notes: form.notes || null,
       };
       if (!payload.creator_id) throw new Error("Please pick a creator");
@@ -220,8 +220,6 @@ export default function ContractsPage() {
                     className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <option value="Exclusive Management">Exclusive Management</option>
-                    <option value="Talent Representation">Talent Representation</option>
-                    <option value="Campaign Specific">Campaign Specific</option>
                   </select>
                 </div>
                 <div className="grid gap-2">
@@ -235,7 +233,6 @@ export default function ContractsPage() {
                     <option value="Draft">Draft</option>
                     <option value="Active">Active</option>
                     <option value="Expired">Expired</option>
-                    <option value="Terminated">Terminated</option>
                   </select>
                 </div>
                 <div className="grid gap-2">
@@ -261,16 +258,9 @@ export default function ContractsPage() {
                   <Input id="ct-end" type="date" value={form.end_date} onChange={(e) => set({ end_date: e.target.value })} />
                 </div>
               </div>
-              <div className="grid gap-3 rounded-lg border border-border/40 p-4">
-                <Label className="flex items-center gap-2 text-sm font-normal">
-                  <input
-                    type="checkbox"
-                    checked={form.renewal_reminder}
-                    onChange={(e) => set({ renewal_reminder: e.target.checked })}
-                    className="size-4 accent-primary"
-                  />
-                  Send renewal reminder
-                </Label>
+              <div className="grid gap-2">
+                <Label htmlFor="ct-renewal">Renewal reminder date</Label>
+                <Input id="ct-renewal" type="date" value={form.renewal_reminder} onChange={(e) => set({ renewal_reminder: e.target.value })} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="ct-notes">Notes</Label>
@@ -331,7 +321,7 @@ export default function ContractsPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{contract.exclusivity || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {contract.renewal_reminder ? "Yes" : "No"}
+                      {contract.renewal_reminder ? new Date(contract.renewal_reminder).toLocaleDateString() : "—"}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
                       <DropdownMenu>
@@ -351,7 +341,7 @@ export default function ContractsPage() {
                                 start_date: contract.start_date ?? "",
                                 end_date: contract.end_date ?? "",
                                 exclusivity: contract.exclusivity ?? "No",
-                                renewal_reminder: contract.renewal_reminder ?? false,
+                                renewal_reminder: contract.renewal_reminder ?? "",
                                 notes: contract.notes ?? "",
                               });
                               setDialogOpen(true);

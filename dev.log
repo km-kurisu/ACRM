@@ -9,3 +9,10 @@
 ✓ Ready in 1069ms
 ✓ Running next.config.ts took 76ms
 
+Attention: Clerk collects telemetry data from its SDKs when connected to development instances.
+The data collected is used to inform Clerk's product roadmap.
+To learn more, including how to opt-out from the telemetry program, visit: https://clerk.com/docs/telemetry.
+
+ GET /dashboard 200 in 5.9s (next.js: 428ms, proxy.ts: 947ms, application-code: 4.6s)
+ GET /sign-in 200 in 1298ms (next.js: 1160ms, proxy.ts: 16ms, application-code: 122ms)
+[browser] Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview (https://immense-stinkbug-52.clerk.accounts.dev/npm/@clerk/clerk-js@6/dist/clerk.browser.js:12:6133)

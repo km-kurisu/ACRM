@@ -18,9 +18,9 @@ export type Creator = {
   primary_content_type?: string | null;
   languages?: string | null;
   interested_in_exclusive_mgmt?: "Yes" | "No" | "Maybe" | null;
-  rate_card_received?: boolean | null;
-  gst_available?: boolean | null;
-  payment_details_received?: boolean | null;
+  rate_card_received?: "Yes" | "No" | null;
+  gst_available?: "Yes" | "No" | null;
+  payment_details_received?: "Yes" | "No" | null;
   priority?: "High" | "Medium" | "Low" | null;
   assigned_manager?: string | null;
   notes?: string | null;
@@ -77,7 +77,7 @@ export type Contract = {
   start_date?: string | null;
   end_date?: string | null;
   exclusivity?: string | null;
-  renewal_reminder?: boolean | null;
+  renewal_reminder?: string | null;
   contract_status?: string | null;
   notes?: string | null;
   created_at: string;
