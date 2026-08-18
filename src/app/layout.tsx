@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: "Anime Creator Agency CRM",
+  title: "AnimeCRM",
   description: "CRM for creators and campaigns",
 };
 
