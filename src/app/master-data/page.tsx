@@ -320,7 +320,24 @@ export default function MasterDataPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">
                   <Label htmlFor="c-niche">Niche</Label>
-                  <Input id="c-niche" value={form.niche} onChange={(e) => set({ niche: e.target.value })} />
+                  <select
+                    id="c-niche"
+                    value={form.niche}
+                    onChange={(e) => set({ niche: e.target.value })}
+                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">—</option>
+                    <option value="Cosplay">Cosplay</option>
+                    <option value="Fan Art / Illustration">Fan Art / Illustration</option>
+                    <option value="AMV Editing">AMV Editing</option>
+                    <option value="Anime Commentary / Review">Anime Commentary / Review</option>
+                    <option value="Voice Acting / Dubbing">Voice Acting / Dubbing</option>
+                    <option value="Anime News">Anime News</option>
+                    <option value="Figure Collecting">Figure Collecting</option>
+                    <option value="Manga Content">Manga Content</option>
+                    <option value="Gaming + Anime">Gaming + Anime</option>
+                    <option value="Anime Merch Reviews">Anime Merch Reviews</option>
+                  </select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="c-type">Primary Content Type</Label>

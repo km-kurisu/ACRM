@@ -50,7 +50,7 @@ const EMPTY: DealForm = {
   deal_value: "",
   agency_commission: "",
   campaign_status: "Pitched",
-  invoice_status: "Sent",
+  invoice_status: "Not Sent",
   payment_status: "Pending",
   due_date: "",
   completion_date: "",
@@ -300,6 +300,7 @@ export default function DealsPage() {
                     onChange={(e) => set({ invoice_status: e.target.value })}
                     className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
+                    <option value="Not Sent">Not Sent</option>
                     <option value="Sent">Sent</option>
                     <option value="Overdue">Overdue</option>
                   </select>
@@ -313,6 +314,7 @@ export default function DealsPage() {
                     className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <option value="Pending">Pending</option>
+                    <option value="Partial">Partial</option>
                     <option value="Paid">Paid</option>
                   </select>
                 </div>
@@ -419,7 +421,7 @@ export default function DealsPage() {
                                 deal_value: deal.deal_value != null ? String(deal.deal_value) : "",
                                 agency_commission: deal.agency_commission != null ? String(deal.agency_commission) : "",
                                 campaign_status: deal.campaign_status ?? "Pitched",
-                                invoice_status: deal.invoice_status ?? "Sent",
+                                invoice_status: deal.invoice_status ?? "Not Sent",
                                 payment_status: deal.payment_status ?? "Pending",
                                 due_date: deal.due_date ?? "",
                                 completion_date: deal.completion_date ?? "",

@@ -54,6 +54,7 @@ const EMPTY: ContractForm = {
 const STATUS_COLORS: Record<string, string> = {
   Draft: "bg-muted text-muted-foreground",
   Active: "bg-foreground/10 text-foreground",
+  Renewed: "bg-foreground/10 text-foreground",
   Expired: "bg-muted text-muted-foreground",
   Terminated: "bg-border/60 text-muted-foreground line-through",
 };
@@ -220,6 +221,10 @@ export default function ContractsPage() {
                     className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <option value="Exclusive Management">Exclusive Management</option>
+                    <option value="Non-Exclusive Management">Non-Exclusive Management</option>
+                    <option value="Brand Deal Only">Brand Deal Only</option>
+                    <option value="Project-Based">Project-Based</option>
+                    <option value="Ambassadorship">Ambassadorship</option>
                   </select>
                 </div>
                 <div className="grid gap-2">
@@ -232,7 +237,9 @@ export default function ContractsPage() {
                   >
                     <option value="Draft">Draft</option>
                     <option value="Active">Active</option>
+                    <option value="Renewed">Renewed</option>
                     <option value="Expired">Expired</option>
+                    <option value="Terminated">Terminated</option>
                   </select>
                 </div>
                 <div className="grid gap-2">
