@@ -16,7 +16,8 @@ import {
 import { getDashboardOverview, type CountItem } from "@/actions";
 import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PipelineBarChart, DealStatusDonutChart } from "@/components/DashboardCharts";
+import { PipelinePieChart, DealStatusDonutChart } from "@/components/DashboardCharts";
+import { TopCreatorsSection } from "@/components/TopCreatorsSection";
 
 export const dynamic = "force-dynamic";
 
@@ -56,53 +57,8 @@ function statCard(label: string, value: number, money?: boolean) {
           <Icon className="size-4 shrink-0 text-primary" />
         </div>
         <p className="mt-2 truncate text-2xl font-bold tabular-nums text-gradient">
-          {money ? fmtINR(value) : value.toLocaleString()}
+          {money ? fmtINR(value) : value.toLocaleString("en-IN")}
         </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function BreakdownCard({
-  title,
-  description,
-  data,
-  total,
-  money,
-}: {
-  title: string;
-  description: string;
-  data: CountItem[];
-  total: number;
-  money?: boolean;
-}) {
-  return (
-    <Card className="glass">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {data.map((item) => {
-          const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
-          return (
-            <div key={item.label}>
-              <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
-                <span className="text-muted-foreground">{item.label}</span>
-                <span className="font-semibold tabular-nums">
-                  {money ? fmtINR(item.value) : item.value}
-                  {!money && total > 0 && <span className="ml-1 text-xs font-normal text-muted-foreground">({pct}%)</span>}
-                </span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-foreground/70"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
       </CardContent>
     </Card>
   );
@@ -138,28 +94,13 @@ export default async function DashboardPage() {
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">{statCards}</section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <BreakdownCard
-          title="Pipeline Breakdown"
-          description={`Where all ${overview.creatorsCount} creators stand right now`}
-          data={overview.pipeline}
-          total={overview.creatorsCount}
-        />
-        <BreakdownCard
-          title="Brand Deal Status"
-          description={`Campaign status across ${overview.totalDeals} deals`}
-          data={overview.dealStatus}
-          total={overview.totalDeals}
-        />
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-2">
         <Card className="glass">
           <CardHeader>
             <CardTitle>Creator Pipeline by Status</CardTitle>
             <CardDescription>Creators grouped by their current stage</CardDescription>
           </CardHeader>
           <CardContent>
-            <PipelineBarChart data={overview.pipeline} />
+            <PipelinePieChart data={overview.pipeline} />
           </CardContent>
         </Card>
 
@@ -174,39 +115,11 @@ export default async function DashboardPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card className="glass">
-          <CardHeader>
-            <CardTitle>Top Creators</CardTitle>
-            <CardDescription>Priority roster, ranked</CardDescription>
-            <CardAction>
-              <Link href="/master-data" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                View all <ArrowRight className="size-3" />
-              </Link>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {overview.topCreators.map((c) => (
-              <Link
-                key={c.id}
-                href="/master-data"
-                className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent/60"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                    {c.creator_name.charAt(0).toUpperCase()}
-                  </div>
-                  <p className="truncate text-sm font-medium">{c.creator_name}</p>
-                </div>
-                <span className="shrink-0 text-xs text-muted-foreground">Roster</span>
-              </Link>
-            ))}
-            {overview.topCreators.length === 0 && (
-              <p className="px-3 py-6 text-sm text-muted-foreground">No creators yet.</p>
-            )}
-          </CardContent>
-        </Card>
+      <section>
+        <TopCreatorsSection topCreators={overview.topCreators} />
+      </section>
 
+      <section>
         <Card className="glass">
           <CardHeader>
             <CardTitle>Recent Outreach</CardTitle>

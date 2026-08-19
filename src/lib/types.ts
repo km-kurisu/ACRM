@@ -1,7 +1,7 @@
 export type Creator = {
   id: string;
   creator_name: string;
-  creator_username?: string | null;
+  creator_type?: string | null;
   instagram?: string | null;
   youtube?: string | null;
   x_twitter?: string | null;

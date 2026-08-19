@@ -6,6 +6,7 @@ const STATUS_COLORS: Record<PresenceStatus, string> = {
   active: "bg-green-500",
   inactive: "bg-yellow-500",
   offline: "bg-gray-400",
+  invisible: "bg-purple-500",
 };
 
 interface StatusDotProps {

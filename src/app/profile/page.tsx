@@ -1,27 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { UserProfile } from "@clerk/nextjs";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { setInvisible } from "@/actions";
+import { StatusSelector } from "@/components/StatusSelector";
 
 export default function ProfilePage() {
-  const [isInvisible, setIsInvisible] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const handleToggle = async () => {
-    setLoading(true);
-    try {
-      await setInvisible(!isInvisible);
-      setIsInvisible(!isInvisible);
-    } catch (error) {
-      console.error("Failed to toggle invisible:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div>
       <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
@@ -35,14 +19,9 @@ export default function ProfilePage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Control how you appear to others.
           </p>
-          <Button
-            variant={isInvisible ? "default" : "outline"}
-            className="mt-4"
-            onClick={handleToggle}
-            disabled={loading}
-          >
-            {loading ? "Updating..." : isInvisible ? "Appear Invisible" : "Appear Online"}
-          </Button>
+          <div className="mt-4">
+            <StatusSelector />
+          </div>
         </div>
       </Card>
     </div>

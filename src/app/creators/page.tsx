@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
@@ -96,14 +97,7 @@ const MGMT_COLORS: Record<string, string> = {
   Prospect: "bg-muted text-muted-foreground",
 };
 
-const CONTRACT_COLORS: Record<string, string> = {
-  Active: "bg-foreground/10 text-foreground",
-  Draft: "bg-muted text-muted-foreground",
-  Expired: "bg-muted text-muted-foreground",
-  Terminated: "bg-border/60 text-muted-foreground line-through",
-};
-
-export default function MasterDataPage() {
+export default function CreatorsPage() {
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
   const [rows, setRows] = useState<MasterDataRow[]>([]);
@@ -121,7 +115,7 @@ export default function MasterDataPage() {
       setRows(data);
       setLoaded(true);
     } catch {
-      toast.error("Could not load master data");
+      toast.error("Could not load creators");
     } finally {
       setLoading(false);
     }
@@ -136,14 +130,12 @@ export default function MasterDataPage() {
         setRows(data);
         setLoaded(true);
       } catch {
-        if (!cancelled) toast.error("Could not load master data");
+        if (!cancelled) toast.error("Could not load creators");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = query.trim()
@@ -163,18 +155,39 @@ export default function MasterDataPage() {
     setForm((prev) => ({ ...prev, ...v }));
   }
 
-  function fmtDate(value: string | null | undefined) {
-    return value ? new Date(value).toLocaleDateString() : "—";
-  }
-
   function fmtNum(value: number | null | undefined) {
-    return value != null && value > 0 ? value.toLocaleString() : "—";
+    return value != null && value > 0 ? value.toLocaleString("en-IN") : "—";
   }
 
-  function yesNo(value: boolean | string | null | undefined) {
-    if (value == null) return "—";
-    if (typeof value === "string") return value === "Yes" ? "Yes" : "No";
-    return value ? "Yes" : "No";
+  function openEdit(row: MasterDataRow) {
+    setEditing(row);
+    setForm({
+      creator_name: row.creator_name,
+      creator_type: row.creator_type ?? "",
+      instagram: row.instagram ?? "",
+      youtube: row.youtube ?? "",
+      x_twitter: row.x_twitter ?? "",
+      other_platforms: row.other_platforms ?? "",
+      email: row.email ?? "",
+      phone_number: row.phone_number ?? "",
+      city: row.city ?? "",
+      state: row.state ?? "",
+      country: row.country ?? "",
+      niche: row.niche ?? "",
+      followers_instagram: row.followers_instagram != null ? String(row.followers_instagram) : "",
+      followers_youtube: row.followers_youtube != null ? String(row.followers_youtube) : "",
+      engagement_rate: row.engagement_rate != null ? String(row.engagement_rate) : "",
+      primary_content_type: row.primary_content_type ?? "",
+      languages: row.languages ?? "",
+      interested_in_exclusive_mgmt: row.interested_in_exclusive_mgmt ?? "No",
+      rate_card_received: row.rate_card_received === "Yes",
+      gst_available: row.gst_available === "Yes",
+      payment_details_received: row.payment_details_received === "Yes",
+      priority: row.priority ?? "Medium",
+      assigned_manager: row.assigned_manager ?? "",
+      notes: row.notes ?? "",
+    });
+    setDialogOpen(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -239,11 +252,9 @@ export default function MasterDataPage() {
     <div className="flex h-full min-h-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Master Data</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Creators</h1>
           <p className="mt-1 text-muted-foreground">
-            {loaded
-              ? `${rows.length} creator${rows.length === 1 ? "" : "s"} in the registry. Auto columns are computed from outreach and contracts.`
-              : "Loading registry…"}
+            {loaded ? `${rows.length} creator${rows.length === 1 ? "" : "s"} in the roster.` : "Loading creators…"}
           </p>
         </div>
         <Dialog
@@ -264,7 +275,7 @@ export default function MasterDataPage() {
             <DialogHeader>
               <DialogTitle>{editing ? `Edit ${editing.creator_name}` : "Add Creator"}</DialogTitle>
               <DialogDescription>
-                {editing ? "Update the creator's details." : "Add a new creator to the registry."}
+                {editing ? "Update the creator's details." : "Add a new creator to the roster."}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="grid gap-4">
@@ -357,8 +368,8 @@ export default function MasterDataPage() {
                   </select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="c-type">Primary Content Type</Label>
-                  <Input id="c-type" value={form.primary_content_type} onChange={(e) => set({ primary_content_type: e.target.value })} />
+                  <Label htmlFor="c-content">Primary Content Type</Label>
+                  <Input id="c-content" value={form.primary_content_type} onChange={(e) => set({ primary_content_type: e.target.value })} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="c-languages">Languages</Label>
@@ -453,7 +464,7 @@ export default function MasterDataPage() {
               className="w-full sm:w-72"
             />
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              Scroll right to see all columns
+              Click a name to view details · Scroll right for all columns
             </span>
           </div>
         </CardHeader>
@@ -464,34 +475,17 @@ export default function MasterDataPage() {
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="pl-6">Creator Name</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Instagram</TableHead>
-                  <TableHead>YouTube</TableHead>
-                  <TableHead>X (Twitter)</TableHead>
-                  <TableHead>Other Platforms</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Country</TableHead>
                   <TableHead>Niche</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>City</TableHead>
+                  <TableHead>Country</TableHead>
                   <TableHead className="text-right">Followers (IG)</TableHead>
                   <TableHead className="text-right">Followers (YT)</TableHead>
                   <TableHead className="text-right">Total Reach</TableHead>
                   <TableHead className="text-right">Engagement</TableHead>
-                  <TableHead>Content Type</TableHead>
-                  <TableHead>Languages</TableHead>
                   <TableHead>Mgmt Status</TableHead>
-                  <TableHead>Exclusive?</TableHead>
-                  <TableHead>First Contacted</TableHead>
-                  <TableHead>Next Follow-up</TableHead>
-                  <TableHead>Outreach Outcome</TableHead>
-                  <TableHead>Contract Status</TableHead>
-                  <TableHead>Rate Card</TableHead>
-                  <TableHead>GST</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>Priority</TableHead>
                   <TableHead>Manager</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <TableHead>Priority</TableHead>
                   <TableHead className="pr-6 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -500,57 +494,39 @@ export default function MasterDataPage() {
                   <TableRow key={row.id} className="hover:bg-accent/40">
                     <TableCell className="pl-6">
                       <div className="flex items-center gap-2">
-                        <div className="grid size-7 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
+                        <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                           {row.creator_name.charAt(0).toUpperCase()}
                         </div>
-                        <span className="whitespace-nowrap font-medium">{row.creator_name}</span>
+                        <Link
+                          href={`/creators/${row.id}`}
+                          className="whitespace-nowrap font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                          {row.creator_name}
+                        </Link>
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{row.creator_type || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.instagram || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.youtube || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.x_twitter || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.other_platforms || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.email || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.phone_number || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.city || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.state || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.country || "—"}</TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{row.niche || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.email || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.city || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.country || "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">{fmtNum(row.followers_instagram)}</TableCell>
                     <TableCell className="text-right tabular-nums">{fmtNum(row.followers_youtube)}</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">{fmtNum(row.total_reach)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.engagement_rate != null ? `${row.engagement_rate}%` : "—"}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.primary_content_type || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.languages || "—"}</TableCell>
                     <TableCell>
                       <Badge className={MGMT_COLORS[row.management_status ?? ""] ?? "bg-muted text-muted-foreground"}>
                         {row.management_status || "—"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {row.interested_in_exclusive_mgmt || "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDate(row.date_first_contacted)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDate(row.next_follow_up_date)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.outreach_outcome || "—"}</TableCell>
-                    <TableCell>
-                      <Badge className={CONTRACT_COLORS[row.contract_status ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {row.contract_status || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{yesNo(row.rate_card_received)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{yesNo(row.gst_available)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{yesNo(row.payment_details_received)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.assigned_manager || "—"}</TableCell>
                     <TableCell>
                       <Badge className={PRIORITY_COLORS[row.priority ?? ""] ?? "bg-muted text-muted-foreground"}>
                         {row.priority || "—"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.assigned_manager || "—"}</TableCell>
-                    <TableCell className="max-w-[280px] truncate text-muted-foreground">{row.notes || "—"}</TableCell>
                     <TableCell className="pr-6 text-right">
                       {isAdmin && (
                         <DropdownMenu>
@@ -560,39 +536,11 @@ export default function MasterDataPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="glass-strong">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditing(row);
-                                setForm({
-                                  creator_name: row.creator_name,
-                                  creator_type: row.creator_type ?? "",
-                                  instagram: row.instagram ?? "",
-                                  youtube: row.youtube ?? "",
-                                  x_twitter: row.x_twitter ?? "",
-                                  other_platforms: row.other_platforms ?? "",
-                                  email: row.email ?? "",
-                                  phone_number: row.phone_number ?? "",
-                                  city: row.city ?? "",
-                                  state: row.state ?? "",
-                                  country: row.country ?? "",
-                                  niche: row.niche ?? "",
-                                  followers_instagram: row.followers_instagram != null ? String(row.followers_instagram) : "",
-                                  followers_youtube: row.followers_youtube != null ? String(row.followers_youtube) : "",
-                                  engagement_rate: row.engagement_rate != null ? String(row.engagement_rate) : "",
-                                  primary_content_type: row.primary_content_type ?? "",
-                                  languages: row.languages ?? "",
-                                  interested_in_exclusive_mgmt: row.interested_in_exclusive_mgmt ?? "No",
-                                  rate_card_received: row.rate_card_received === "Yes",
-                                  gst_available: row.gst_available === "Yes",
-                                  payment_details_received: row.payment_details_received === "Yes",
-                                  priority: row.priority ?? "Medium",
-                                  assigned_manager: row.assigned_manager ?? "",
-                                  notes: row.notes ?? "",
-                                });
-                                setDialogOpen(true);
-                              }}
-                            >
+                            <DropdownMenuItem onClick={() => openEdit(row)}>
                               <Pencil className="size-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/creators/${row.id}`}>View Details</Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem variant="destructive" onClick={() => handleDelete(row)}>
@@ -611,7 +559,7 @@ export default function MasterDataPage() {
           {loading && (
             <div className="flex items-center justify-center gap-3 px-6 py-12 text-muted-foreground">
               <div className="size-4 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
-              Loading master data…
+              Loading creators…
             </div>
           )}
           {!loading && filtered.length === 0 && (

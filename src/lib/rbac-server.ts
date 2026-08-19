@@ -1,11 +1,17 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
+
+async function getRole(userId: string): Promise<string> {
+  const client = await clerkClient();
+  const user = await client.users.getUser(userId);
+  return (user.publicMetadata?.role as string) || "member";
+}
 
 export async function requireAdmin(): Promise<string> {
-  const { userId, sessionClaims } = await auth();
+  const { userId } = await auth();
   if (!userId) {
     throw new Error("UNAUTHENTICATED");
   }
-  const role = (sessionClaims?.metadata?.role as string) || "member";
+  const role = await getRole(userId);
   if (role !== "admin") {
     throw new Error("FORBIDDEN");
   }

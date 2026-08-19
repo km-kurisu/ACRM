@@ -1,6 +1,6 @@
 import { db } from "./server";
 
-export type PresenceStatus = "active" | "inactive" | "offline";
+export type PresenceStatus = "active" | "inactive" | "offline" | "invisible";
 
 export type UserPresence = {
   user_id: string;
@@ -12,17 +12,14 @@ export type UserPresence = {
 
 export function getEffectiveStatus(
   statusOverride: string | null,
-  isOnline: boolean,
-  lastActiveAt: string,
   currentUserId: string,
   viewerUserId: string
 ): PresenceStatus {
   if (statusOverride === "invisible") {
     return currentUserId === viewerUserId ? "active" : "offline";
   }
-  if (!isOnline) return "offline";
-  if (Date.now() - new Date(lastActiveAt).getTime() > 10 * 60 * 1000) {
-    return "inactive";
+  if (statusOverride === "active" || statusOverride === "inactive" || statusOverride === "offline") {
+    return statusOverride;
   }
   return "active";
 }

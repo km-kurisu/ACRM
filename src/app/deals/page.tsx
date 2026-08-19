@@ -28,10 +28,10 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type DealForm = {
-  creator_id: string;
+  creator_ids: string[];
   company_id: string;
   campaign: string;
   deal_value: string;
@@ -45,7 +45,7 @@ type DealForm = {
 };
 
 const EMPTY: DealForm = {
-  creator_id: "",
+  creator_ids: [],
   company_id: "",
   campaign: "",
   deal_value: "",
@@ -146,12 +146,20 @@ export default function DealsPage() {
     setForm((prev) => ({ ...prev, ...v }));
   }
 
+  function toggleCreator(creatorId: string) {
+    setForm((prev) => ({
+      ...prev,
+      creator_ids: prev.creator_ids.includes(creatorId)
+        ? prev.creator_ids.filter((id) => id !== creatorId)
+        : [...prev.creator_ids, creatorId],
+    }));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload: Partial<Deal> = {
-        creator_id: form.creator_id,
+      const basePayload = {
         company_id: form.company_id,
         campaign: form.campaign,
         deal_value: form.deal_value ? Number(form.deal_value) : null,
@@ -163,14 +171,23 @@ export default function DealsPage() {
         completion_date: form.completion_date || null,
         notes: form.notes || null,
       };
-      if (!payload.creator_id) throw new Error("Please pick a creator");
-      if (!payload.company_id) throw new Error("Please pick a company");
+
+      if (!basePayload.company_id) throw new Error("Please pick a company");
+
       if (editing) {
+        const payload: Partial<Deal> = {
+          ...basePayload,
+          creator_id: form.creator_ids[0] || editing.creator_id,
+        };
         await updateDeal(editing.id, payload);
         toast.success(`Updated "${payload.campaign}"`);
       } else {
-        await createDeal(payload);
-        toast.success(`Created "${payload.campaign}"`);
+        if (form.creator_ids.length === 0) throw new Error("Please select at least one creator");
+        for (const creatorId of form.creator_ids) {
+          const payload: Partial<Deal> = { ...basePayload, creator_id: creatorId };
+          await createDeal(payload);
+        }
+        toast.success(`Created ${form.creator_ids.length} deal${form.creator_ids.length > 1 ? "s" : ""}`);
       }
       setDialogOpen(false);
       resetForm();
@@ -193,7 +210,6 @@ export default function DealsPage() {
     }
   }
 
-  const creatorOptions = creators.map((c) => ({ id: c.id, label: c.creator_name }));
   const companyOptions = companies.map((c) => ({ id: c.id, label: c.name }));
 
   return (
@@ -219,11 +235,11 @@ export default function DealsPage() {
               </Button>
             </DialogTrigger>
           )}
-          <DialogContent className="glass-strong max-h-[85vh] overflow-y-auto">
+          <DialogContent className="glass-strong max-h-[85vh] overflow-y-auto sm:max-w-4xl">
             <DialogHeader>
               <DialogTitle>{editing ? `Edit "${editing.campaign}"` : "Add Deal"}</DialogTitle>
               <DialogDescription>
-                {editing ? "Update the deal's details." : "Link a creator with a company."}
+                {editing ? "Update the deal's details." : "Link creators with a company."}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="grid gap-4">
@@ -231,46 +247,63 @@ export default function DealsPage() {
                 <Label htmlFor="d-campaign">Campaign *</Label>
                 <Input id="d-campaign" required value={form.campaign} onChange={(e) => set({ campaign: e.target.value })} />
               </div>
+
+              {!editing && (
+                <div className="grid gap-2">
+                  <Label>Creators * (select one or more)</Label>
+                  <div className="glass max-h-48 overflow-y-auto rounded-lg border border-border/40 p-3">
+                    {creators.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No creators available.</p>
+                    )}
+                    {creators.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
+                      >
+                        <Checkbox
+                          checked={form.creator_ids.includes(c.id)}
+                          onCheckedChange={() => toggleCreator(c.id)}
+                        />
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
+                            {c.creator_name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="truncate">{c.creator_name}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {form.creator_ids.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {form.creator_ids.length} creator{form.creator_ids.length > 1 ? "s" : ""} selected — a deal will be created for each
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label>Creator *</Label>
-                  <Select
-                    value={form.creator_id}
-                    onValueChange={(v) => set({ creator_id: v })}
-                    disabled={!loaded}
-                  >
-                    <SelectTrigger id="d-creator">
-                      <SelectValue placeholder="Select creator" />
-                    </SelectTrigger>
-                    <SelectContent className="glass-strong">
-                      {creatorOptions.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
                   <Label>Company *</Label>
-                  <Select
-                    value={form.company_id}
-                    onValueChange={(v) => set({ company_id: v })}
-                    disabled={!loaded}
-                  >
-                    <SelectTrigger id="d-company">
-                      <SelectValue placeholder="Select company" />
-                    </SelectTrigger>
-                    <SelectContent className="glass-strong">
-                      {companyOptions.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="glass rounded-lg border border-border/40 p-3">
+                    {companyOptions.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
+                      >
+                        <Checkbox
+                          checked={form.company_id === c.id}
+                          onCheckedChange={() => set({ company_id: c.id })}
+                        />
+                        <span>{c.label}</span>
+                      </label>
+                    ))}
+                    {companyOptions.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No companies available.</p>
+                    )}
+                  </div>
                 </div>
               </div>
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="d-value">Deal value ($)</Label>
@@ -421,7 +454,7 @@ export default function DealsPage() {
                               onClick={() => {
                                 setEditing(deal);
                                 setForm({
-                                  creator_id: deal.creator_id ?? "",
+                                  creator_ids: deal.creator_id ? [deal.creator_id] : [],
                                   company_id: deal.company_id ?? "",
                                   campaign: deal.campaign ?? "",
                                   deal_value: deal.deal_value != null ? String(deal.deal_value) : "",

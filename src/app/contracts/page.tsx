@@ -189,7 +189,7 @@ export default function ContractsPage() {
               </Button>
             </DialogTrigger>
           )}
-          <DialogContent className="glass-strong">
+          <DialogContent className="glass-strong sm:max-w-4xl">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Contract" : "Add Contract"}</DialogTitle>
               <DialogDescription>

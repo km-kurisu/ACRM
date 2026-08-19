@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/server";
 import { requireAdmin, requireUser } from "@/lib/rbac-server";
 import type { Creator, Company, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
+import type { PresenceStatus } from "@/lib/presence";
 
 function fail(error: { message?: string } | null): never {
   throw new Error(error?.message || "Database error");
@@ -38,6 +39,12 @@ export async function listCreators(): Promise<Creator[]> {
   const { data, error } = await db.from("creators").select("*").order("created_at", { ascending: false });
   if (error) fail(error);
   return (data || []) as Creator[];
+}
+
+export async function getCreator(id: string): Promise<Creator | null> {
+  const { data, error } = await db.from("creators").select("*").eq("id", id).single();
+  if (error) fail(error);
+  return data as Creator | null;
 }
 
 export async function listCreatorSummaries(): Promise<CreatorSummary[]> {
@@ -110,6 +117,12 @@ export async function listDeals(): Promise<DealWithRefs[]> {
   return (data || []) as DealWithRefs[];
 }
 
+export async function listDealsByCreator(creatorId: string): Promise<Deal[]> {
+  const { data, error } = await db.from("deals").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false });
+  if (error) fail(error);
+  return (data || []) as Deal[];
+}
+
 export async function createDeal(input: Partial<Deal>) {
   await requireAdmin();
   const { error } = await db.from("deals").insert([input]);
@@ -139,6 +152,12 @@ export async function listOutreach(): Promise<OutreachWithCreator[]> {
   return (data || []) as OutreachWithCreator[];
 }
 
+export async function listOutreachByCreator(creatorId: string): Promise<Outreach[]> {
+  const { data, error } = await db.from("outreach").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false });
+  if (error) fail(error);
+  return (data || []) as Outreach[];
+}
+
 export async function createOutreach(input: Partial<Outreach>) {
   await requireAdmin();
   const { error } = await db.from("outreach").insert([input]);
@@ -166,6 +185,12 @@ export async function listContracts(): Promise<ContractWithCreator[]> {
   const { data, error } = await db.from("contracts").select("*, creators(id, creator_name)").order("created_at", { ascending: false });
   if (error) fail(error);
   return (data || []) as ContractWithCreator[];
+}
+
+export async function listContractsByCreator(creatorId: string): Promise<Contract[]> {
+  const { data, error } = await db.from("contracts").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false });
+  if (error) fail(error);
+  return (data || []) as Contract[];
 }
 
 export async function createContract(input: Partial<Contract>) {
@@ -266,7 +291,7 @@ export type DashboardOverview = {
   totalRevenue: number;
   agencyCommission: number;
   onHold: number;
-  topCreators: CreatorSummary[];
+  topCreators: (CreatorSummary & { total_deal_value: number; total_followers: number; engagement_rate: number })[];
   recentOutreach: OutreachWithCreator[];
 };
 
@@ -367,7 +392,35 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     dealStatus.set(label, (dealStatus.get(label) ?? 0) + 1);
   }
 
-  const [topCreators, recentOutreach] = await Promise.all([listCreatorSummaries(), listOutreach()]);
+  const [creatorSummaries, recentOutreach] = await Promise.all([listCreatorSummaries(), listOutreach()]);
+
+  const { data: allCreators } = await db.from("creators").select("id, creator_name, followers_instagram, followers_youtube, engagement_rate");
+  const { data: allDeals } = await db.from("deals").select("creator_id, deal_value");
+
+  const creatorMap = new Map<string, { followers_instagram: number; followers_youtube: number; engagement_rate: number }>();
+  for (const c of (allCreators || []) as { id: string; followers_instagram: number | null; followers_youtube: number | null; engagement_rate: number | null }[]) {
+    creatorMap.set(c.id, {
+      followers_instagram: Number(c.followers_instagram || 0),
+      followers_youtube: Number(c.followers_youtube || 0),
+      engagement_rate: Number(c.engagement_rate || 0),
+    });
+  }
+
+  const dealValuesByCreator = new Map<string, number>();
+  for (const d of (allDeals || []) as { creator_id: string | null; deal_value: number | null }[]) {
+    if (!d.creator_id) continue;
+    dealValuesByCreator.set(d.creator_id, (dealValuesByCreator.get(d.creator_id) ?? 0) + Number(d.deal_value || 0));
+  }
+
+  const topCreators = creatorSummaries.map((cs) => {
+    const info = creatorMap.get(cs.id);
+    return {
+      ...cs,
+      total_deal_value: dealValuesByCreator.get(cs.id) ?? 0,
+      total_followers: (info?.followers_instagram ?? 0) + (info?.followers_youtube ?? 0),
+      engagement_rate: info?.engagement_rate ?? 0,
+    };
+  });
 
   return {
     creatorsCount: (creators || []).length,
@@ -406,7 +459,7 @@ export async function getDashboardStats(): Promise<DashboardStat[]> {
 
 // ---------- Presence ----------
 
-export async function setInvisible(invisible: boolean) {
+export async function setPresenceStatus(status: PresenceStatus) {
   const userId = await requireUser();
 
   const { error } = await db
@@ -414,9 +467,11 @@ export async function setInvisible(invisible: boolean) {
     .upsert({
       user_id: userId,
       workspace_id: "00000000-0000-0000-0000-000000000001",
-      status_override: invisible ? "invisible" : null,
+      status_override: status,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,workspace_id" });
 
-  if (error) fail(error);
+  if (error) {
+    console.warn("Failed to update presence status:", error.message);
+  }
 }

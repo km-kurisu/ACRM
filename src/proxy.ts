@@ -1,4 +1,4 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 const isAdminRoute = createRouteMatcher([
@@ -14,12 +14,15 @@ export default clerkMiddleware(async (auth, req) => {
     await auth.protect();
   }
 
-  // RBAC: Check admin-only routes
-  const { sessionClaims } = await auth();
-  const role = (sessionClaims?.metadata?.role as string) || "member";
-
-  if (isAdminRoute(req) && role !== "admin") {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+  // RBAC: Check admin-only routes by fetching user's publicMetadata from Clerk
+  const { userId } = await auth();
+  if (isAdminRoute(req) && userId) {
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const role = (user.publicMetadata?.role as string) || "member";
+    if (role !== "admin") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
   }
 });
 

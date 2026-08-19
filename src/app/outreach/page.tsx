@@ -188,7 +188,7 @@ export default function OutreachPage() {
               </Button>
             </DialogTrigger>
           )}
-          <DialogContent className="glass-strong">
+          <DialogContent className="glass-strong sm:max-w-4xl">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Outreach" : "Log Outreach"}</DialogTitle>
               <DialogDescription>

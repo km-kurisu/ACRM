@@ -3,11 +3,10 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings } from "lucide-react";
+import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings, Users, FileSpreadsheet } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
 import ThemeToggle from "@/components/ThemeToggle";
-import { StatusDot } from "@/components/StatusDot";
-import { usePresence } from "@/hooks/use-presence";
+import { StatusSelector } from "@/components/StatusSelector";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -18,6 +17,8 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/master-data", label: "Master Data", icon: Database },
+  { href: "/creators", label: "Creators", icon: Users },
+  { href: "/pages", label: "Pages", icon: FileSpreadsheet },
   { href: "/deals", label: "Deals", icon: Handshake },
   { href: "/outreach", label: "Outreach", icon: Megaphone },
   { href: "/contracts", label: "Contracts", icon: FileText },
@@ -26,7 +27,6 @@ const NAV = [
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { status } = usePresence();
 
   return (
     <div className="relative min-h-screen">
@@ -74,7 +74,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm text-muted-foreground">Profile</span>
             <div className="flex items-center gap-2">
-              <StatusDot status={status} />
+              <StatusSelector />
               <UserButton />
             </div>
           </div>
@@ -120,7 +120,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <div className="mt-6 flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
                 <span className="text-sm text-muted-foreground">Profile</span>
                 <div className="flex items-center gap-2">
-                  <StatusDot status={status} />
+                  <StatusSelector />
                   <UserButton />
                 </div>
               </div>
