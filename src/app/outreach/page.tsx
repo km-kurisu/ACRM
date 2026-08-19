@@ -179,7 +179,7 @@ export default function OutreachPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button className="glass">
+            <Button className="glass" variant="secondary">
               <Plus className="size-4" /> Log Outreach
             </Button>
           </DialogTrigger>

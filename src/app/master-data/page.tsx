@@ -251,7 +251,7 @@ export default function MasterDataPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button className="glass">
+            <Button className="glass" variant="secondary">
               <Plus className="size-4" /> Add Creator
             </Button>
           </DialogTrigger>

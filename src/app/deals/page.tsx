@@ -210,7 +210,7 @@ export default function DealsPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button className="glass">
+            <Button className="glass" variant="secondary">
               <Plus className="size-4" /> Add Deal
             </Button>
           </DialogTrigger>
