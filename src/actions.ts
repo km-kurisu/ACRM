@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/server";
-import { requireAdmin, requireUser } from "@/lib/rbac";
+import { requireAdmin, requireUser } from "@/lib/rbac-server";
 import type { Creator, Company, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
 
 function fail(error: { message?: string } | null): never {

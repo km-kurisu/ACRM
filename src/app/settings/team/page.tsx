@@ -1,6 +1,6 @@
 import React from "react";
 import { clerkClient } from "@clerk/nextjs/server";
-import { requireAdmin } from "@/lib/rbac";
+import { requireAdmin } from "@/lib/rbac-server";
 import {
   Card,
   CardHeader,
