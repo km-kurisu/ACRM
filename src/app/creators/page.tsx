@@ -97,6 +97,12 @@ const MGMT_COLORS: Record<string, string> = {
   Prospect: "bg-muted text-muted-foreground",
 };
 
+const LANGUAGE_OPTIONS = [
+  "English", "Hindi", "Japanese", "Korean", "Chinese (Mandarin)", "Spanish", "Portuguese",
+  "French", "German", "Italian", "Russian", "Arabic", "Thai", "Vietnamese", "Indonesian",
+  "Tagalog", "Bengali", "Tamil", "Telugu", "Marathi", "Gujarati", "Punjabi", "Urdu",
+];
+
 export default function CreatorsPage() {
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
@@ -278,7 +284,8 @@ export default function CreatorsPage() {
                 {editing ? "Update the creator's details." : "Add a new creator to the roster."}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="grid gap-4">
+            <form onSubmit={handleSubmit} className="grid gap-5">
+              {/* Basic Info */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="c-name">Creator Name *</Label>
@@ -301,6 +308,8 @@ export default function CreatorsPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Contact */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="c-email">Email</Label>
@@ -310,6 +319,27 @@ export default function CreatorsPage() {
                   <Label htmlFor="c-phone">Phone Number</Label>
                   <Input id="c-phone" value={form.phone_number} onChange={(e) => set({ phone_number: e.target.value })} />
                 </div>
+              </div>
+
+              {/* Location */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="c-city">City</Label>
+                  <Input id="c-city" value={form.city} onChange={(e) => set({ city: e.target.value })} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="c-state">State</Label>
+                  <Input id="c-state" value={form.state} onChange={(e) => set({ state: e.target.value })} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="c-country">Country</Label>
+                  <Input id="c-country" value={form.country} onChange={(e) => set({ country: e.target.value })} />
+                </div>
+              </div>
+
+              {/* Social Media */}
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Social Media</p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
@@ -331,19 +361,10 @@ export default function CreatorsPage() {
                   <Input id="c-other" value={form.other_platforms} onChange={(e) => set({ other_platforms: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="c-city">City</Label>
-                  <Input id="c-city" value={form.city} onChange={(e) => set({ city: e.target.value })} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="c-state">State</Label>
-                  <Input id="c-state" value={form.state} onChange={(e) => set({ state: e.target.value })} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="c-country">Country</Label>
-                  <Input id="c-country" value={form.country} onChange={(e) => set({ country: e.target.value })} />
-                </div>
+
+              {/* Content & Niche */}
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content &amp; Niche</p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">
@@ -367,14 +388,35 @@ export default function CreatorsPage() {
                     <option value="Anime Merch Reviews">Anime Merch Reviews</option>
                   </select>
                 </div>
-                <div className="grid gap-2">
+                <div className="grid gap-2 sm:col-span-2">
                   <Label htmlFor="c-content">Primary Content Type</Label>
                   <Input id="c-content" value={form.primary_content_type} onChange={(e) => set({ primary_content_type: e.target.value })} />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="c-languages">Languages</Label>
-                  <Input id="c-languages" value={form.languages} onChange={(e) => set({ languages: e.target.value })} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Languages</Label>
+                <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border border-input bg-background p-3">
+                  {LANGUAGE_OPTIONS.map((lang) => (
+                    <Label key={lang} className="flex items-center gap-1.5 text-sm font-normal">
+                      <Checkbox
+                        checked={form.languages.split(", ").filter(Boolean).includes(lang)}
+                        onCheckedChange={(checked) => {
+                          const current = form.languages.split(", ").filter(Boolean);
+                          const next = checked
+                            ? [...current, lang]
+                            : current.filter((l) => l !== lang);
+                          set({ languages: next.join(", ") });
+                        }}
+                      />
+                      {lang}
+                    </Label>
+                  ))}
                 </div>
+              </div>
+
+              {/* Metrics */}
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Metrics</p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">
@@ -389,6 +431,11 @@ export default function CreatorsPage() {
                   <Label htmlFor="c-engagement">Engagement Rate (%)</Label>
                   <Input id="c-engagement" type="number" min={0} step="0.1" value={form.engagement_rate} onChange={(e) => set({ engagement_rate: e.target.value })} />
                 </div>
+              </div>
+
+              {/* Management */}
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Management</p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">
@@ -405,7 +452,7 @@ export default function CreatorsPage() {
                   </select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="c-exclusive">Interested in Exclusive Mgmt?</Label>
+                  <Label htmlFor="c-exclusive">Exclusive Mgmt Interest</Label>
                   <select
                     id="c-exclusive"
                     value={form.interested_in_exclusive_mgmt}
@@ -421,6 +468,11 @@ export default function CreatorsPage() {
                   <Label htmlFor="c-manager">Assigned Manager</Label>
                   <Input id="c-manager" value={form.assigned_manager} onChange={(e) => set({ assigned_manager: e.target.value })} />
                 </div>
+              </div>
+
+              {/* Documents & Notes */}
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Documents &amp; Notes</p>
               </div>
               <div className="grid gap-3 rounded-lg border border-border/40 p-4 sm:grid-cols-3">
                 <Label className="flex items-center gap-2 text-sm font-normal">

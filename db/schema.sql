@@ -30,7 +30,7 @@ create table if not exists public.users (
 create table if not exists public.creators (
     id text primary key default gen_random_uuid()::text,
     creator_name text not null,
-    creator_username text,
+    creator_type text,
     instagram text,
     youtube text,
     x_twitter text,
@@ -43,7 +43,7 @@ create table if not exists public.creators (
     niche text check (niche in ('Cosplay','Fan Art / Illustration','AMV Editing','Anime Commentary / Review','Voice Acting / Dubbing','Anime News','Figure Collecting','Manga Content','Gaming + Anime','Anime Merch Reviews')),
     followers_instagram numeric(15,2) not null default 0,
     followers_youtube numeric(15,2) not null default 0,
-    engagement_rate numeric(6,4) default 0,
+    engagement_rate numeric(8,2) default 0,
     primary_content_type text,
     languages text,
     interested_in_exclusive_mgmt text check (interested_in_exclusive_mgmt in ('Yes','No','Maybe')),

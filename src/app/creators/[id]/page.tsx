@@ -57,12 +57,19 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import type { Creator, Outreach, Contract, Deal, Company } from "@/lib/types";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PRIORITY_COLORS: Record<string, string> = {
   High: "bg-foreground/10 text-foreground",
   Medium: "bg-muted text-muted-foreground",
   Low: "bg-border/60 text-muted-foreground",
 };
+
+const LANGUAGE_OPTIONS = [
+  "English", "Hindi", "Japanese", "Korean", "Chinese (Mandarin)", "Spanish", "Portuguese",
+  "French", "German", "Italian", "Russian", "Arabic", "Thai", "Vietnamese", "Indonesian",
+  "Tagalog", "Bengali", "Tamil", "Telugu", "Marathi", "Gujarati", "Punjabi", "Urdu",
+];
 
 const OUTREACH_STATUS_COLORS: Record<string, string> = {
   Negotiating: "bg-foreground/10 text-foreground",
@@ -474,7 +481,8 @@ export default function CreatorDetailPage() {
             <DialogTitle>Edit {creator.creator_name}</DialogTitle>
             <DialogDescription>Update the creator&apos;s details.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreatorSubmit} className="grid gap-4">
+          <form onSubmit={handleCreatorSubmit} className="grid gap-5">
+            {/* Basic Info */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Creator Name *</Label>
@@ -492,7 +500,9 @@ export default function CreatorDetailPage() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+
+            {/* Contact */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Email</Label>
                 <Input type="email" value={creatorForm.email} onChange={(e) => setCreatorForm((p) => ({ ...p, email: e.target.value }))} />
@@ -501,7 +511,49 @@ export default function CreatorDetailPage() {
                 <Label>Phone</Label>
                 <Input value={creatorForm.phone_number} onChange={(e) => setCreatorForm((p) => ({ ...p, phone_number: e.target.value }))} />
               </div>
+            </div>
+
+            {/* Location */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="grid gap-2">
+                <Label>City</Label>
+                <Input value={creatorForm.city} onChange={(e) => setCreatorForm((p) => ({ ...p, city: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>State</Label>
+                <Input value={creatorForm.state} onChange={(e) => setCreatorForm((p) => ({ ...p, state: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Country</Label>
+                <Input value={creatorForm.country} onChange={(e) => setCreatorForm((p) => ({ ...p, country: e.target.value }))} />
+              </div>
+            </div>
+
+            {/* Social Media */}
+            <div className="grid gap-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Social Media</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid gap-2">
+                <Label>Instagram</Label>
+                <Input value={creatorForm.instagram} onChange={(e) => setCreatorForm((p) => ({ ...p, instagram: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>YouTube</Label>
+                <Input value={creatorForm.youtube} onChange={(e) => setCreatorForm((p) => ({ ...p, youtube: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>X (Twitter)</Label>
+                <Input value={creatorForm.x_twitter} onChange={(e) => setCreatorForm((p) => ({ ...p, x_twitter: e.target.value }))} />
+              </div>
+            </div>
+
+            {/* Content & Niche */}
+            <div className="grid gap-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content &amp; Niche</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid gap-2 sm:col-span-2">
                 <Label>Niche</Label>
                 <select value={creatorForm.niche} onChange={(e) => setCreatorForm((p) => ({ ...p, niche: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                   <option value="">—</option>
@@ -518,33 +570,30 @@ export default function CreatorDetailPage() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label>Instagram</Label>
-                <Input value={creatorForm.instagram} onChange={(e) => setCreatorForm((p) => ({ ...p, instagram: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>YouTube</Label>
-                <Input value={creatorForm.youtube} onChange={(e) => setCreatorForm((p) => ({ ...p, youtube: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>X (Twitter)</Label>
-                <Input value={creatorForm.x_twitter} onChange={(e) => setCreatorForm((p) => ({ ...p, x_twitter: e.target.value }))} />
+            <div className="grid gap-2">
+              <Label>Languages</Label>
+              <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border border-input bg-background p-3">
+                {LANGUAGE_OPTIONS.map((lang) => (
+                  <Label key={lang} className="flex items-center gap-1.5 text-sm font-normal">
+                    <Checkbox
+                      checked={creatorForm.languages.split(", ").filter(Boolean).includes(lang)}
+                      onCheckedChange={(checked) => {
+                        const current = creatorForm.languages.split(", ").filter(Boolean);
+                        const next = checked
+                          ? [...current, lang]
+                          : current.filter((l) => l !== lang);
+                        setCreatorForm((p) => ({ ...p, languages: next.join(", ") }));
+                      }}
+                    />
+                    {lang}
+                  </Label>
+                ))}
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label>City</Label>
-                <Input value={creatorForm.city} onChange={(e) => setCreatorForm((p) => ({ ...p, city: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>State</Label>
-                <Input value={creatorForm.state} onChange={(e) => setCreatorForm((p) => ({ ...p, state: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Country</Label>
-                <Input value={creatorForm.country} onChange={(e) => setCreatorForm((p) => ({ ...p, country: e.target.value }))} />
-              </div>
+
+            {/* Metrics */}
+            <div className="grid gap-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Metrics</p>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="grid gap-2">
@@ -559,6 +608,11 @@ export default function CreatorDetailPage() {
                 <Label>Engagement Rate (%)</Label>
                 <Input type="number" min={0} step="0.1" value={creatorForm.engagement_rate} onChange={(e) => setCreatorForm((p) => ({ ...p, engagement_rate: e.target.value }))} />
               </div>
+            </div>
+
+            {/* Management */}
+            <div className="grid gap-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Management</p>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="grid gap-2">
@@ -581,6 +635,11 @@ export default function CreatorDetailPage() {
                 <Label>Assigned Manager</Label>
                 <Input value={creatorForm.assigned_manager} onChange={(e) => setCreatorForm((p) => ({ ...p, assigned_manager: e.target.value }))} />
               </div>
+            </div>
+
+            {/* Notes */}
+            <div className="grid gap-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Notes</p>
             </div>
             <div className="grid gap-2">
               <Label>Notes</Label>
