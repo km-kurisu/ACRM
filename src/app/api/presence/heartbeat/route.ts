@@ -11,7 +11,7 @@ export async function POST() {
   try {
     await updateLastActive(userId);
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to update status" },
       { status: 500 }

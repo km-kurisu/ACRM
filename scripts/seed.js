@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { createClient } = require("@supabase/supabase-js");
+const { Clerk } = require("@clerk/backend");
 const fs = require("fs");
 const path = require("path");
 
@@ -116,4 +117,35 @@ async function seed() {
   console.log("Seeding complete.");
 }
 
-seed().catch((err) => { console.error(err); process.exit(1); });
+const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+const clerk = clerkSecretKey ? new Clerk({ secretKey: clerkSecretKey }) : null;
+
+async function seedUserRoles() {
+  if (!clerk) {
+    console.log("CLERK_SECRET_KEY not set, skipping user role seeding.");
+    return;
+  }
+  
+  console.log("Seeding user roles...");
+  
+  try {
+    const users = await clerk.users.getUserList();
+    
+    for (const user of users.data) {
+      const currentRole = user.publicMetadata?.role;
+      if (!currentRole) {
+        const role = users.data.indexOf(user) === 0 ? "admin" : "member";
+        await clerk.users.updateUser(user.id, {
+          publicMetadata: { role }
+        });
+        console.log(`Set ${user.emailAddresses[0]?.emailAddress} to ${role}`);
+      }
+    }
+    
+    console.log("User roles seeded.");
+  } catch (err) {
+    console.error("Failed to seed user roles:", err.message);
+  }
+}
+
+seed().then(() => seedUserRoles()).catch((err) => { console.error(err); process.exit(1); });

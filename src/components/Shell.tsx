@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
 import ThemeToggle from "@/components/ThemeToggle";
+import { StatusDot } from "@/components/StatusDot";
+import { usePresence } from "@/hooks/use-presence";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -24,6 +26,7 @@ const NAV = [
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { status } = usePresence();
 
   return (
     <div className="relative min-h-screen">
@@ -70,7 +73,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <Separator />
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm text-muted-foreground">Profile</span>
-            <UserButton />
+            <div className="flex items-center gap-2">
+              <StatusDot status={status} />
+              <UserButton />
+            </div>
           </div>
         </div>
       </aside>
@@ -113,7 +119,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               </nav>
               <div className="mt-6 flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
                 <span className="text-sm text-muted-foreground">Profile</span>
-                <UserButton />
+                <div className="flex items-center gap-2">
+                  <StatusDot status={status} />
+                  <UserButton />
+                </div>
               </div>
             </SheetContent>
           </Sheet>

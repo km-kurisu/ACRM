@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { db } from "./server";
 
 export type PresenceStatus = "active" | "inactive" | "offline";

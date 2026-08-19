@@ -9,16 +9,17 @@ const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 export function usePresence() {
   const [status, setStatus] = useState<PresenceStatus>("offline");
   const [lastActiveAt, setLastActiveAt] = useState<string | null>(null);
-  const lastInteractionRef = useRef<number>(Date.now());
+  const lastInteractionRef = useRef<number>(0);
   const heartbeatTimerRef = useRef<NodeJS.Timeout | null>(null);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const statusRef = useRef<PresenceStatus>("offline");
 
   const sendHeartbeat = useCallback(async () => {
     try {
       await fetch("/api/presence/heartbeat", { method: "POST" });
       lastInteractionRef.current = Date.now();
-    } catch (error) {
-      console.error("Heartbeat failed:", error);
+    } catch {
+      console.error("Heartbeat failed");
     }
   }, []);
 
@@ -27,9 +28,10 @@ export function usePresence() {
       const response = await fetch("/api/presence");
       const data = await response.json();
       setStatus(data.status);
+      statusRef.current = data.status;
       setLastActiveAt(data.last_active_at);
-    } catch (error) {
-      console.error("Failed to fetch status:", error);
+    } catch {
+      console.error("Failed to fetch status");
     }
   }, []);
 
@@ -45,6 +47,9 @@ export function usePresence() {
   }, [handleActivity]);
 
   useEffect(() => {
+    // Initialize last interaction time
+    lastInteractionRef.current = Date.now();
+
     // Set up activity listeners
     const events = ["mousedown", "keydown", "scroll", "touchstart"];
     events.forEach((event) => {
@@ -63,13 +68,15 @@ export function usePresence() {
     // Set up idle detection
     idleTimerRef.current = setInterval(() => {
       const timeSinceLastInteraction = Date.now() - lastInteractionRef.current;
-      if (timeSinceLastInteraction >= IDLE_TIMEOUT && status !== "offline") {
+      if (timeSinceLastInteraction >= IDLE_TIMEOUT && statusRef.current !== "offline") {
+        statusRef.current = "inactive";
         setStatus("inactive");
       }
     }, 60 * 1000); // Check every minute
 
     // Initial heartbeat and status fetch
     sendHeartbeat();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     updateStatus();
 
     return () => {
@@ -84,7 +91,8 @@ export function usePresence() {
         clearInterval(idleTimerRef.current);
       }
     };
-  }, [handleActivity, handleVisibilityChange, sendHeartbeat, updateStatus, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return { status, lastActiveAt };
 }
