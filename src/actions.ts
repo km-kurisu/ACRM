@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/server";
+import { requireAdmin, requireUser } from "@/lib/rbac";
 import type { Creator, Company, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
 
 function fail(error: { message?: string } | null): never {
@@ -46,18 +47,21 @@ export async function listCreatorSummaries(): Promise<CreatorSummary[]> {
 }
 
 export async function createCreator(input: Partial<Creator>) {
+  await requireAdmin();
   const { error } = await db.from("creators").insert([input]);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function updateCreator(id: string, input: Partial<Creator>) {
+  await requireAdmin();
   const { error } = await db.from("creators").update(input).eq("id", id);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function deleteCreator(id: string) {
+  await requireAdmin();
   const { error } = await db.from("creators").delete().eq("id", id);
   if (error) fail(error);
   revalidateAll();
@@ -78,18 +82,21 @@ export async function listCompanySummaries(): Promise<CompanySummary[]> {
 }
 
 export async function createCompany(input: Partial<Company>) {
+  await requireAdmin();
   const { error } = await db.from("companies").insert([input]);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function updateCompany(id: string, input: Partial<Company>) {
+  await requireAdmin();
   const { error } = await db.from("companies").update(input).eq("id", id);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function deleteCompany(id: string) {
+  await requireAdmin();
   const { error } = await db.from("companies").delete().eq("id", id);
   if (error) fail(error);
   revalidateAll();
@@ -104,18 +111,21 @@ export async function listDeals(): Promise<DealWithRefs[]> {
 }
 
 export async function createDeal(input: Partial<Deal>) {
+  await requireAdmin();
   const { error } = await db.from("deals").insert([input]);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function updateDeal(id: string, input: Partial<Deal>) {
+  await requireAdmin();
   const { error } = await db.from("deals").update(input).eq("id", id);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function deleteDeal(id: string) {
+  await requireAdmin();
   const { error } = await db.from("deals").delete().eq("id", id);
   if (error) fail(error);
   revalidateAll();
@@ -130,18 +140,21 @@ export async function listOutreach(): Promise<OutreachWithCreator[]> {
 }
 
 export async function createOutreach(input: Partial<Outreach>) {
+  await requireAdmin();
   const { error } = await db.from("outreach").insert([input]);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function updateOutreach(id: string, input: Partial<Outreach>) {
+  await requireAdmin();
   const { error } = await db.from("outreach").update(input).eq("id", id);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function deleteOutreach(id: string) {
+  await requireAdmin();
   const { error } = await db.from("outreach").delete().eq("id", id);
   if (error) fail(error);
   revalidateAll();
@@ -156,18 +169,21 @@ export async function listContracts(): Promise<ContractWithCreator[]> {
 }
 
 export async function createContract(input: Partial<Contract>) {
+  await requireAdmin();
   const { error } = await db.from("contracts").insert([input]);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function updateContract(id: string, input: Partial<Contract>) {
+  await requireAdmin();
   const { error } = await db.from("contracts").update(input).eq("id", id);
   if (error) fail(error);
   revalidateAll();
 }
 
 export async function deleteContract(id: string) {
+  await requireAdmin();
   const { error } = await db.from("contracts").delete().eq("id", id);
   if (error) fail(error);
   revalidateAll();
@@ -386,4 +402,21 @@ export async function getDashboardStats(): Promise<DashboardStat[]> {
   results.push({ label: "Total Revenue", value: (revenue || []).reduce((s: number, r) => s + Number(r.deal_value || 0), 0) });
 
   return results;
+}
+
+// ---------- Presence ----------
+
+export async function setInvisible(invisible: boolean) {
+  const userId = await requireUser();
+
+  const { error } = await db
+    .from("user_status")
+    .upsert({
+      user_id: userId,
+      workspace_id: "00000000-0000-0000-0000-000000000001",
+      status_override: invisible ? "invisible" : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,workspace_id" });
+
+  if (error) fail(error);
 }
