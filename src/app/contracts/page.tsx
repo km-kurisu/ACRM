@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { toast } from "sonner";
+import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Contract, Creator } from "@/lib/types";
 import { createContract, deleteContract, listContracts, listCreators, updateContract, type ContractWithCreator } from "@/actions";
@@ -60,6 +61,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ContractsPage() {
+  const { user } = useUser();
+  const isAdmin = user?.publicMetadata?.role === "admin";
   const [contracts, setContracts] = useState<ContractWithCreator[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -179,11 +182,13 @@ export default function ContractsPage() {
             if (!open) resetForm();
           }}
         >
-          <DialogTrigger asChild>
-            <Button className="glass" variant="secondary">
-              <Plus className="size-4" /> Add Contract
-            </Button>
-          </DialogTrigger>
+          {isAdmin && (
+            <DialogTrigger asChild>
+              <Button className="glass" variant="secondary">
+                <Plus className="size-4" /> Add Contract
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="glass-strong">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Contract" : "Add Contract"}</DialogTitle>
@@ -331,37 +336,39 @@ export default function ContractsPage() {
                       {contract.renewal_reminder ? new Date(contract.renewal_reminder).toLocaleDateString() : "—"}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label="Actions for contract">
-                            <MoreVertical className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass-strong">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditing(contract);
-                              setForm({
-                                creator_id: contract.creator_id ?? "",
-                                contract_type: contract.contract_type ?? "Exclusive Management",
-                                contract_status: contract.contract_status ?? "Draft",
-                                start_date: contract.start_date ?? "",
-                                end_date: contract.end_date ?? "",
-                                exclusivity: contract.exclusivity ?? "No",
-                                renewal_reminder: contract.renewal_reminder ?? "",
-                                notes: contract.notes ?? "",
-                              });
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="size-4" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onClick={() => handleDelete(contract)}>
-                            <Trash2 className="size-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {isAdmin && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label="Actions for contract">
+                              <MoreVertical className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="glass-strong">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditing(contract);
+                                setForm({
+                                  creator_id: contract.creator_id ?? "",
+                                  contract_type: contract.contract_type ?? "Exclusive Management",
+                                  contract_status: contract.contract_status ?? "Draft",
+                                  start_date: contract.start_date ?? "",
+                                  end_date: contract.end_date ?? "",
+                                  exclusivity: contract.exclusivity ?? "No",
+                                  renewal_reminder: contract.renewal_reminder ?? "",
+                                  notes: contract.notes ?? "",
+                                });
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(contract)}>
+                              <Trash2 className="size-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

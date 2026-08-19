@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { toast } from "sonner";
+import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Outreach, Creator } from "@/lib/types";
 import { createOutreach, deleteOutreach, listOutreach, listCreators, updateOutreach, type OutreachWithCreator } from "@/actions";
@@ -60,6 +61,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function OutreachPage() {
+  const { user } = useUser();
+  const isAdmin = user?.publicMetadata?.role === "admin";
   const [items, setItems] = useState<OutreachWithCreator[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -178,11 +181,13 @@ export default function OutreachPage() {
             if (!open) resetForm();
           }}
         >
-          <DialogTrigger asChild>
-            <Button className="glass" variant="secondary">
-              <Plus className="size-4" /> Log Outreach
-            </Button>
-          </DialogTrigger>
+          {isAdmin && (
+            <DialogTrigger asChild>
+              <Button className="glass" variant="secondary">
+                <Plus className="size-4" /> Log Outreach
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="glass-strong">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Outreach" : "Log Outreach"}</DialogTitle>
@@ -331,36 +336,38 @@ export default function OutreachPage() {
                     </TableCell>
                     <TableCell className="max-w-[220px] truncate text-muted-foreground">{item.outcome || "—"}</TableCell>
                     <TableCell className="pr-6 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label="Actions for outreach record">
-                            <MoreVertical className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass-strong">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditing(item);
-                              setForm({
-                                creator_id: item.creator_id ?? "",
-                                contact_method: item.contact_method ?? "Email",
-                                date_contacted: item.date_contacted ?? "",
-                                next_follow_up_date: item.next_follow_up_date ?? "",
-                                current_status: item.current_status ?? "No Response",
-                                outcome: item.outcome ?? "",
-                                notes: item.notes ?? "",
-                              });
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="size-4" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onClick={() => handleDelete(item)}>
-                            <Trash2 className="size-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {isAdmin && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label="Actions for outreach record">
+                              <MoreVertical className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="glass-strong">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditing(item);
+                                setForm({
+                                  creator_id: item.creator_id ?? "",
+                                  contact_method: item.contact_method ?? "Email",
+                                  date_contacted: item.date_contacted ?? "",
+                                  next_follow_up_date: item.next_follow_up_date ?? "",
+                                  current_status: item.current_status ?? "No Response",
+                                  outcome: item.outcome ?? "",
+                                  notes: item.notes ?? "",
+                                });
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(item)}>
+                              <Trash2 className="size-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

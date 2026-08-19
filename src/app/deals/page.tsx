@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { toast } from "sonner";
+import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Deal, Creator, Company } from "@/lib/types";
 import { createDeal, deleteDeal, listDeals, listCreators, listCompanies, updateDeal, type DealWithRefs } from "@/actions";
@@ -72,6 +73,8 @@ const PAYMENT_COLORS: Record<string, string> = {
 };
 
 export default function DealsPage() {
+  const { user } = useUser();
+  const isAdmin = user?.publicMetadata?.role === "admin";
   const [deals, setDeals] = useState<DealWithRefs[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -209,11 +212,13 @@ export default function DealsPage() {
             if (!open) resetForm();
           }}
         >
-          <DialogTrigger asChild>
-            <Button className="glass" variant="secondary">
-              <Plus className="size-4" /> Add Deal
-            </Button>
-          </DialogTrigger>
+          {isAdmin && (
+            <DialogTrigger asChild>
+              <Button className="glass" variant="secondary">
+                <Plus className="size-4" /> Add Deal
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="glass-strong max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? `Edit "${editing.campaign}"` : "Add Deal"}</DialogTitle>
@@ -404,40 +409,42 @@ export default function DealsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="pr-6 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label={`Actions for ${deal.campaign}`}>
-                            <MoreVertical className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass-strong">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditing(deal);
-                              setForm({
-                                creator_id: deal.creator_id ?? "",
-                                company_id: deal.company_id ?? "",
-                                campaign: deal.campaign ?? "",
-                                deal_value: deal.deal_value != null ? String(deal.deal_value) : "",
-                                agency_commission: deal.agency_commission != null ? String(deal.agency_commission) : "",
-                                campaign_status: deal.campaign_status ?? "Pitched",
-                                invoice_status: deal.invoice_status ?? "Not Sent",
-                                payment_status: deal.payment_status ?? "Pending",
-                                due_date: deal.due_date ?? "",
-                                completion_date: deal.completion_date ?? "",
-                                notes: deal.notes ?? "",
-                              });
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="size-4" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onClick={() => handleDelete(deal)}>
-                            <Trash2 className="size-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {isAdmin && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label={`Actions for ${deal.campaign}`}>
+                              <MoreVertical className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="glass-strong">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditing(deal);
+                                setForm({
+                                  creator_id: deal.creator_id ?? "",
+                                  company_id: deal.company_id ?? "",
+                                  campaign: deal.campaign ?? "",
+                                  deal_value: deal.deal_value != null ? String(deal.deal_value) : "",
+                                  agency_commission: deal.agency_commission != null ? String(deal.agency_commission) : "",
+                                  campaign_status: deal.campaign_status ?? "Pitched",
+                                  invoice_status: deal.invoice_status ?? "Not Sent",
+                                  payment_status: deal.payment_status ?? "Pending",
+                                  due_date: deal.due_date ?? "",
+                                  completion_date: deal.completion_date ?? "",
+                                  notes: deal.notes ?? "",
+                                });
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(deal)}>
+                              <Trash2 className="size-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

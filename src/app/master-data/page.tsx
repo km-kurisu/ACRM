@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { toast } from "sonner";
+import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Creator } from "@/lib/types";
 import { createCreator, deleteCreator, listMasterData, updateCreator, type MasterDataRow } from "@/actions";
@@ -103,6 +104,8 @@ const CONTRACT_COLORS: Record<string, string> = {
 };
 
 export default function MasterDataPage() {
+  const { user } = useUser();
+  const isAdmin = user?.publicMetadata?.role === "admin";
   const [rows, setRows] = useState<MasterDataRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -250,11 +253,13 @@ export default function MasterDataPage() {
             if (!open) resetForm();
           }}
         >
-          <DialogTrigger asChild>
-            <Button className="glass" variant="secondary">
-              <Plus className="size-4" /> Add Creator
-            </Button>
-          </DialogTrigger>
+          {isAdmin && (
+            <DialogTrigger asChild>
+              <Button className="glass" variant="secondary">
+                <Plus className="size-4" /> Add Creator
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="glass-strong max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? `Edit ${editing.creator_name}` : "Add Creator"}</DialogTitle>
@@ -535,53 +540,55 @@ export default function MasterDataPage() {
                     <TableCell className="whitespace-nowrap text-muted-foreground">{row.assigned_manager || "—"}</TableCell>
                     <TableCell className="max-w-[280px] truncate text-muted-foreground">{row.notes || "—"}</TableCell>
                     <TableCell className="pr-6 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label={`Actions for ${row.creator_name}`}>
-                            <MoreVertical className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass-strong">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditing(row);
-                              setForm({
-                                creator_name: row.creator_name,
-                                creator_username: row.creator_username ?? "",
-                                instagram: row.instagram ?? "",
-                                youtube: row.youtube ?? "",
-                                x_twitter: row.x_twitter ?? "",
-                                other_platforms: row.other_platforms ?? "",
-                                email: row.email ?? "",
-                                phone_number: row.phone_number ?? "",
-                                city: row.city ?? "",
-                                state: row.state ?? "",
-                                country: row.country ?? "",
-                                niche: row.niche ?? "",
-                                followers_instagram: row.followers_instagram != null ? String(row.followers_instagram) : "",
-                                followers_youtube: row.followers_youtube != null ? String(row.followers_youtube) : "",
-                                engagement_rate: row.engagement_rate != null ? String(row.engagement_rate) : "",
-                                primary_content_type: row.primary_content_type ?? "",
-                                languages: row.languages ?? "",
-                                interested_in_exclusive_mgmt: row.interested_in_exclusive_mgmt ?? "No",
-                                rate_card_received: row.rate_card_received === "Yes",
-                                gst_available: row.gst_available === "Yes",
-                                payment_details_received: row.payment_details_received === "Yes",
-                                priority: row.priority ?? "Medium",
-                                assigned_manager: row.assigned_manager ?? "",
-                                notes: row.notes ?? "",
-                              });
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="size-4" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onClick={() => handleDelete(row)}>
-                            <Trash2 className="size-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {isAdmin && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label={`Actions for ${row.creator_name}`}>
+                              <MoreVertical className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="glass-strong">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditing(row);
+                                setForm({
+                                  creator_name: row.creator_name,
+                                  creator_username: row.creator_username ?? "",
+                                  instagram: row.instagram ?? "",
+                                  youtube: row.youtube ?? "",
+                                  x_twitter: row.x_twitter ?? "",
+                                  other_platforms: row.other_platforms ?? "",
+                                  email: row.email ?? "",
+                                  phone_number: row.phone_number ?? "",
+                                  city: row.city ?? "",
+                                  state: row.state ?? "",
+                                  country: row.country ?? "",
+                                  niche: row.niche ?? "",
+                                  followers_instagram: row.followers_instagram != null ? String(row.followers_instagram) : "",
+                                  followers_youtube: row.followers_youtube != null ? String(row.followers_youtube) : "",
+                                  engagement_rate: row.engagement_rate != null ? String(row.engagement_rate) : "",
+                                  primary_content_type: row.primary_content_type ?? "",
+                                  languages: row.languages ?? "",
+                                  interested_in_exclusive_mgmt: row.interested_in_exclusive_mgmt ?? "No",
+                                  rate_card_received: row.rate_card_received === "Yes",
+                                  gst_available: row.gst_available === "Yes",
+                                  payment_details_received: row.payment_details_received === "Yes",
+                                  priority: row.priority ?? "Medium",
+                                  assigned_manager: row.assigned_manager ?? "",
+                                  notes: row.notes ?? "",
+                                });
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(row)}>
+                              <Trash2 className="size-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
