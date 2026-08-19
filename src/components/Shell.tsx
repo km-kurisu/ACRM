@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami } from "lucide-react";
+import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Toaster } from "@/components/ui/sonner";
@@ -19,6 +19,7 @@ const NAV = [
   { href: "/deals", label: "Deals", icon: Handshake },
   { href: "/outreach", label: "Outreach", icon: Megaphone },
   { href: "/contracts", label: "Contracts", icon: FileText },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -117,7 +118,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </SheetContent>
           </Sheet>
           <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <span>Moodly CRM</span>
+            <span>AnimeCRM</span>
           </Link>
         </div>
         <ThemeToggle />
