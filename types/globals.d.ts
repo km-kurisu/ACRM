@@ -1,8 +1,8 @@
 declare global {
-  namespace CustomJwtSessionClaims {
-    interface Metadata {
+  interface CustomJwtSessionClaims {
+    metadata?: {
       role?: "admin" | "member" | "viewer";
-    }
+    };
   }
 }
 
