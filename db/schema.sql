@@ -141,11 +141,173 @@ alter table public.deals enable row level security;
 create policy "users select own org" on public.users for select using (auth.uid() is not null);
 create policy "users update own org" on public.users for update using (auth.uid() is not null);
 
-create policy "creators full access" on public.creators for all using (auth.uid() is not null) with check (auth.uid() is not null);
-create policy "outreach full access" on public.outreach for all using (auth.uid() is not null) with check (auth.uid() is not null);
-create policy "contracts full access" on public.contracts for all using (auth.uid() is not null) with check (auth.uid() is not null);
-create policy "companies full access" on public.companies for all using (auth.uid() is not null) with check (auth.uid() is not null);
-create policy "deals full access" on public.deals for all using (auth.uid() is not null) with check (auth.uid() is not null);
+-- ------------------------------------------------------------
+-- workspaces — multi-workspace support (future-proofing)
+-- ------------------------------------------------------------
+create table if not exists public.workspaces (
+    id uuid primary key default gen_random_uuid(),
+    name text not null default 'default',
+    created_at timestamp with time zone not null default timezone('utc'::text, now())
+);
+
+-- Seed default workspace
+insert into public.workspaces (id, name) values
+    ('00000000-0000-0000-0000-000000000001', 'default')
+on conflict do nothing;
+
+-- ------------------------------------------------------------
+-- user_status — presence tracking per workspace
+-- ------------------------------------------------------------
+create table if not exists public.user_status (
+    user_id text not null references public.users(id) on delete cascade,
+    workspace_id uuid not null references public.workspaces(id) on delete cascade,
+    status_override text check (status_override in ('active', 'inactive', 'invisible')),
+    last_active_at timestamp with time zone not null default timezone('utc'::text, now()),
+    updated_at timestamp with time zone not null default timezone('utc'::text, now()),
+    primary key (user_id, workspace_id)
+);
+
+-- ------------------------------------------------------------
+-- RLS for new tables
+-- ------------------------------------------------------------
+alter table public.workspaces enable row level security;
+alter table public.user_status enable row level security;
+
+create policy "workspaces select authenticated" on public.workspaces
+    for select using (auth.uid() is not null);
+
+create policy "user_status select authenticated" on public.user_status
+    for select using (auth.uid() is not null);
+
+create policy "user_status insert own" on public.user_status
+    for insert with check (auth.uid()::text = user_id);
+
+create policy "user_status update own" on public.user_status
+    for update using (auth.uid()::text = user_id);
+
+-- ------------------------------------------------------------
+-- Update existing RLS policies for RBAC
+-- ------------------------------------------------------------
+
+-- Update creators policies
+drop policy if exists "creators full access" on public.creators;
+
+create policy "creators select authenticated" on public.creators
+    for select using (auth.uid() is not null);
+
+create policy "creators insert admin" on public.creators
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "creators update admin" on public.creators
+    for update using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "creators delete admin" on public.creators
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+-- Update outreach policies
+drop policy if exists "outreach full access" on public.outreach;
+
+create policy "outreach select authenticated" on public.outreach
+    for select using (auth.uid() is not null);
+
+create policy "outreach insert admin" on public.outreach
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "outreach update admin" on public.outreach
+    for update using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "outreach delete admin" on public.outreach
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+-- Update contracts policies
+drop policy if exists "contracts full access" on public.contracts;
+
+create policy "contracts select authenticated" on public.contracts
+    for select using (auth.uid() is not null);
+
+create policy "contracts insert admin" on public.contracts
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "contracts update admin" on public.contracts
+    for update using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "contracts delete admin" on public.contracts
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+-- Update companies policies
+drop policy if exists "companies full access" on public.companies;
+
+create policy "companies select authenticated" on public.companies
+    for select using (auth.uid() is not null);
+
+create policy "companies insert admin" on public.companies
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "companies update admin" on public.companies
+    for update using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "companies delete admin" on public.companies
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+-- Update deals policies
+drop policy if exists "deals full access" on public.deals;
+
+create policy "deals select authenticated" on public.deals
+    for select using (auth.uid() is not null);
+
+create policy "deals insert admin" on public.deals
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "deals update admin" on public.deals
+    for update using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "deals delete admin" on public.deals
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
 
 -- ------------------------------------------------------------
 -- Indexes for the derived columns the dashboard reads
