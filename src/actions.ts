@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/server";
+import { ensureUserRow } from "@/lib/user-sync";
 import { requireAdmin, requireUser } from "@/lib/rbac-server";
 import type { Creator, Company, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
 import type { PresenceStatus } from "@/lib/presence";
@@ -461,6 +463,7 @@ export async function getDashboardStats(): Promise<DashboardStat[]> {
 
 export async function setPresenceStatus(status: PresenceStatus) {
   const userId = await requireUser();
+  await ensureUserRow(userId);
 
   const { error } = await db
     .from("user_status")
@@ -474,4 +477,95 @@ export async function setPresenceStatus(status: PresenceStatus) {
   if (error) {
     console.warn("Failed to update presence status:", error.message);
   }
+}
+
+// ---------- Settings ----------
+
+const DEFAULT_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001";
+
+export type SettingsRole = "admin" | "member" | "viewer";
+export type WorkspaceInfo = { id: string; name: string };
+
+export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
+  await requireUser();
+  const { data, error } = await db.from("workspaces").select("id, name").order("created_at");
+  if (error) fail(error);
+  return (data || []) as WorkspaceInfo[];
+}
+
+export async function updateWorkspaceName(workspaceId: string, name: string) {
+  await requireAdmin();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Workspace name cannot be empty");
+
+  const { error } = await db
+    .from("workspaces")
+    .update({ name: trimmed })
+    .eq("id", workspaceId);
+  if (error) fail(error);
+
+  revalidatePath("/settings");
+}
+
+export async function setUserRole(userId: string, role: SettingsRole) {
+  await requireAdmin();
+
+  if (!["admin", "member", "viewer"].includes(role)) {
+    throw new Error("Invalid role");
+  }
+
+  // Clerk replaces publicMetadata wholesale on update — read first so we
+  // preserve any other keys already stored there.
+  const client = await clerkClient();
+  const user = await client.users.getUser(userId);
+  await client.users.updateUser(userId, {
+    publicMetadata: { ...(user.publicMetadata ?? {}), role },
+  });
+
+  revalidatePath("/settings/team");
+}
+
+// ---------- Notification preferences ----------
+
+export type NotificationPreferences = {
+  notify_deal_updates: boolean;
+  notify_contract_renewals: boolean;
+  notify_outreach_followups: boolean;
+  notify_weekly_digest: boolean;
+};
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  const userId = await requireUser();
+
+  const { data, error } = await db
+    .from("user_preferences")
+    .select(
+      "notify_deal_updates, notify_contract_renewals, notify_outreach_followups, notify_weekly_digest"
+    )
+    .eq("user_id", userId)
+    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .maybeSingle();
+  if (error) fail(error);
+
+  return {
+    notify_deal_updates: data?.notify_deal_updates ?? true,
+    notify_contract_renewals: data?.notify_contract_renewals ?? true,
+    notify_outreach_followups: data?.notify_outreach_followups ?? true,
+    notify_weekly_digest: data?.notify_weekly_digest ?? false,
+  };
+}
+
+export async function updateNotificationPreferences(input: NotificationPreferences) {
+  const userId = await requireUser();
+  await ensureUserRow(userId);
+
+  const { error } = await db
+    .from("user_preferences")
+    .upsert({
+      user_id: userId,
+      workspace_id: DEFAULT_WORKSPACE_ID,
+      ...input,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,workspace_id" });
+  if (error) fail(error);
 }

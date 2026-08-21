@@ -1,4 +1,5 @@
 import { db } from "./server";
+import { ensureUserRow } from "./user-sync";
 
 export type PresenceStatus = "active" | "inactive" | "offline" | "invisible";
 
@@ -44,6 +45,7 @@ export async function updateUserStatus(
   statusOverride: string | null,
   workspaceId: string = "00000000-0000-0000-0000-000000000001"
 ): Promise<void> {
+  await ensureUserRow(userId);
   const { error } = await db
     .from("user_status")
     .upsert({
@@ -60,6 +62,7 @@ export async function updateLastActive(
   userId: string,
   workspaceId: string = "00000000-0000-0000-0000-000000000001"
 ): Promise<void> {
+  await ensureUserRow(userId);
   const { error } = await db
     .from("user_status")
     .upsert({

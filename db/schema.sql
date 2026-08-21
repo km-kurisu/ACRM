@@ -168,10 +168,26 @@ create table if not exists public.user_status (
 );
 
 -- ------------------------------------------------------------
+-- user_preferences — per-user settings per workspace
+-- (notification toggles today; more preferences later)
+-- ------------------------------------------------------------
+create table if not exists public.user_preferences (
+    user_id text not null references public.users(id) on delete cascade,
+    workspace_id uuid not null references public.workspaces(id) on delete cascade,
+    notify_deal_updates boolean not null default true,
+    notify_contract_renewals boolean not null default true,
+    notify_outreach_followups boolean not null default true,
+    notify_weekly_digest boolean not null default false,
+    updated_at timestamp with time zone not null default timezone('utc'::text, now()),
+    primary key (user_id, workspace_id)
+);
+
+-- ------------------------------------------------------------
 -- RLS for new tables
 -- ------------------------------------------------------------
 alter table public.workspaces enable row level security;
 alter table public.user_status enable row level security;
+alter table public.user_preferences enable row level security;
 
 create policy "workspaces select authenticated" on public.workspaces
     for select using (auth.uid() is not null);
@@ -183,6 +199,15 @@ create policy "user_status insert own" on public.user_status
     for insert with check (auth.uid()::text = user_id);
 
 create policy "user_status update own" on public.user_status
+    for update using (auth.uid()::text = user_id);
+
+create policy "user_preferences select authenticated" on public.user_preferences
+    for select using (auth.uid() is not null);
+
+create policy "user_preferences insert own" on public.user_preferences
+    for insert with check (auth.uid()::text = user_id);
+
+create policy "user_preferences update own" on public.user_preferences
     for update using (auth.uid()::text = user_id);
 
 -- ------------------------------------------------------------
