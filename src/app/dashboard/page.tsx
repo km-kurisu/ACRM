@@ -10,25 +10,21 @@ import {
   Briefcase,
   Wallet,
   Percent,
-  CirclePause,
   ArrowRight,
+  X,
 } from "lucide-react";
-import { getDashboardOverview, type CountItem } from "@/actions";
+import { listCustomFilters } from "@/actions";
+import { CustomFilterPicker } from "@/components/custom-filter-picker";
+import { parseFilterIds } from "@/lib/filter-url";
+import type { CustomFilter } from "@/lib/custom-filters";
+import { getDashboardOverview } from "@/actions";
 import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PipelinePieChart, DealStatusDonutChart } from "@/components/DashboardCharts";
+import { DonutChart } from "@/components/DashboardCharts";
+import { OUTREACH_STATUS_COLORS } from "@/lib/colors";
 import { TopCreatorsSection } from "@/components/TopCreatorsSection";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_COLORS: Record<string, string> = {
-  Negotiating: "bg-foreground/10 text-foreground",
-  Interested: "bg-foreground/10 text-foreground",
-  "Meeting Scheduled": "bg-foreground/15 text-foreground",
-  "Not Interested": "bg-muted text-muted-foreground line-through",
-  "No Response": "bg-muted text-muted-foreground",
-  Signed: "bg-foreground/10 text-foreground",
-};
 
 const PIPELINE_ICONS: Record<string, typeof Users> = {
   "Total Prospects": Users,
@@ -40,7 +36,6 @@ const PIPELINE_ICONS: Record<string, typeof Users> = {
   "Total Brand Deals": Briefcase,
   "Total Revenue": Wallet,
   Commission: Percent,
-  "On Hold": CirclePause,
 };
 
 function fmtINR(value: number) {
@@ -64,8 +59,27 @@ function statCard(label: string, value: number, money?: boolean) {
   );
 }
 
-export default async function DashboardPage() {
-  const overview = await getDashboardOverview();
+function hrefWithout(activeIds: string[], removedId: string) {
+  const remaining = activeIds.filter((id) => id !== removedId);
+  return remaining.length > 0 ? `/dashboard?filters=${remaining.join(",")}` : "/dashboard";
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const activeIds = parseFilterIds(params.filters);
+  let visibleFilters: CustomFilter[] = [];
+  try {
+    visibleFilters = await listCustomFilters();
+  } catch {
+    visibleFilters = [];
+  }
+  const selected = visibleFilters.filter((f) => activeIds.includes(f.id));
+  const conditions = selected.flatMap((f) => f.conditions);
+  const overview = await getDashboardOverview(conditions);
 
   const pipelineCounts: Record<string, number> = Object.fromEntries(
     overview.pipeline.map((p) => [p.label, p.value])
@@ -81,14 +95,31 @@ export default async function DashboardPage() {
     statCard("Total Brand Deals", overview.totalDeals),
     statCard("Total Revenue", overview.totalRevenue, true),
     statCard("Commission", overview.agencyCommission, true),
-    statCard("On Hold", overview.onHold),
   ];
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">Creator &amp; brand deal pipeline overview.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-muted-foreground">Creator &amp; brand deal pipeline overview.</p>
+          {selected.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {selected.map((f) => (
+                <Link
+                  key={f.id}
+                  href={hrefWithout(activeIds, f.id)}
+                  className="inline-flex items-center gap-1 rounded-full border bg-background/60 px-2.5 py-0.5 text-xs transition-colors hover:bg-accent"
+                  title="Remove filter"
+                >
+                  {f.name}
+                  <X className="size-3" />
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+        <CustomFilterPicker />
       </div>
 
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">{statCards}</section>
@@ -100,7 +131,7 @@ export default async function DashboardPage() {
             <CardDescription>Creators grouped by their current stage</CardDescription>
           </CardHeader>
           <CardContent>
-            <PipelinePieChart data={overview.pipeline} />
+            <DonutChart data={overview.pipeline} height={260} outerRadius={96} caption="Total creators" filterZero />
           </CardContent>
         </Card>
 
@@ -110,7 +141,7 @@ export default async function DashboardPage() {
             <CardDescription>Share of deals across campaign stages</CardDescription>
           </CardHeader>
           <CardContent>
-            <DealStatusDonutChart data={overview.dealStatus} />
+            <DonutChart data={overview.dealStatus} height={220} outerRadius={92} caption="Total deals" />
           </CardContent>
         </Card>
       </section>
@@ -143,7 +174,7 @@ export default async function DashboardPage() {
                     {o.contact_method ?? "—"} · {o.date_contacted ? new Date(o.date_contacted).toLocaleDateString() : "no date"}
                   </p>
                 </div>
-                <Badge className={STATUS_COLORS[o.current_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+                <Badge className={OUTREACH_STATUS_COLORS[o.current_status ?? ""] ?? "bg-muted text-muted-foreground"}>
                   {o.current_status || "—"}
                 </Badge>
               </Link>
