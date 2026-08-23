@@ -342,3 +342,52 @@ create index if not exists idx_outreach_creator on public.outreach (creator_id);
 create index if not exists idx_contracts_creator on public.contracts (creator_id);
 create index if not exists idx_deals_creator on public.deals (creator_id);
 create index if not exists idx_deals_company on public.deals (company_id);
+
+-- ------------------------------------------------------------
+-- custom_filters — saved creator filters (workspace-wide or personal)
+-- ------------------------------------------------------------
+create table if not exists public.custom_filters (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    visibility text not null default 'personal' check (visibility in ('org', 'personal')),
+    conditions jsonb not null default '[]',
+    created_by text not null references public.users(id) on delete cascade,
+    created_at timestamp with time zone not null default timezone('utc'::text, now()),
+    updated_at timestamp with time zone not null default timezone('utc'::text, now())
+);
+
+alter table public.custom_filters enable row level security;
+
+create policy "custom_filters select authenticated" on public.custom_filters
+    for select using (
+        auth.uid() is not null and (
+            visibility = 'org' or
+            created_by = (auth.jwt() ->> 'sub')
+        )
+    );
+
+create policy "custom_filters insert owner-or-admin" on public.custom_filters
+    for insert with check (
+        auth.uid() is not null and (
+            (visibility = 'org' and (auth.jwt() -> 'metadata' ->> 'role') = 'admin') or
+            (visibility = 'personal' and created_by = (auth.jwt() ->> 'sub'))
+        )
+    );
+
+create policy "custom_filters update owner-or-admin" on public.custom_filters
+    for update using (
+        auth.uid() is not null and (
+            (visibility = 'org' and (auth.jwt() -> 'metadata' ->> 'role') = 'admin') or
+            (visibility = 'personal' and created_by = (auth.jwt() ->> 'sub'))
+        )
+    );
+
+create policy "custom_filters delete owner-or-admin" on public.custom_filters
+    for delete using (
+        auth.uid() is not null and (
+            (visibility = 'org' and (auth.jwt() -> 'metadata' ->> 'role') = 'admin') or
+            (visibility = 'personal' and created_by = (auth.jwt() ->> 'sub'))
+        )
+    );
+
+create index if not exists idx_custom_filters_created_by on public.custom_filters (created_by);

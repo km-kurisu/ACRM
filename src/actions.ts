@@ -6,11 +6,52 @@ import { db } from "@/lib/server";
 import { ensureUserRow } from "@/lib/user-sync";
 import { requireAdmin, requireUser } from "@/lib/rbac-server";
 import type { Creator, Company, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
-import type { PresenceStatus } from "@/lib/presence";
+import {
+  matchesFilter,
+  scopeConditions,
+  validateConditions,
+  type CustomFilter,
+  type FilterCondition,
+  type FilterVisibility,
+} from "@/lib/custom-filters";
+import { DEFAULT_WORKSPACE_ID, type PresenceStatus } from "@/lib/presence";
 
 function fail(error: { message?: string } | null): never {
   throw new Error(error?.message || "Database error");
 }
+
+async function rows<T>(query: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T[]> {
+  const { data, error } = await query;
+  if (error) fail(error);
+  return (data ?? []) as T[];
+}
+
+function groupByCreator<T extends { creator_id: string | null }>(items: T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of items) {
+    if (!row.creator_id) continue;
+    const list = map.get(row.creator_id) ?? [];
+    list.push(row);
+    map.set(row.creator_id, list);
+  }
+  return map;
+}
+
+type OutreachRow = {
+  creator_id: string | null;
+  date_contacted: string | null;
+  next_follow_up_date: string | null;
+  current_status: string | null;
+  outcome: string | null;
+  created_at: string;
+};
+
+type ContractRow = { creator_id: string | null; contract_status: string | null; created_at: string };
+
+const OUTREACH_COLUMNS = "creator_id, date_contacted, next_follow_up_date, current_status, outcome, created_at";
+
+const byRecency = (a: OutreachRow, b: OutreachRow) =>
+  (b.date_contacted ?? "").localeCompare(a.date_contacted ?? "") || b.created_at.localeCompare(a.created_at);
 
 function revalidateAll() {
   revalidatePath("/dashboard");
@@ -20,10 +61,8 @@ function revalidateAll() {
   revalidatePath("/deals");
 }
 
-export type DashboardStat = { label: string; value: number };
-
 export type OutreachWithCreator = Outreach & { creators: CreatorSummary | null };
-export type DealWithRefs = Deal & { creators: CreatorSummary | null; companies: CompanySummary | null };
+export type DealWithRefs = Deal & { creators: CreatorSummary[]; companies: CompanySummary | null };
 export type ContractWithCreator = Contract & { creators: CreatorSummary | null };
 
 export type MasterDataRow = Creator & {
@@ -38,21 +77,13 @@ export type MasterDataRow = Creator & {
 // ---------- Creators ----------
 
 export async function listCreators(): Promise<Creator[]> {
-  const { data, error } = await db.from("creators").select("*").order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as Creator[];
+  return rows(db.from("creators").select("*").order("created_at", { ascending: false }));
 }
 
 export async function getCreator(id: string): Promise<Creator | null> {
   const { data, error } = await db.from("creators").select("*").eq("id", id).single();
   if (error) fail(error);
   return data as Creator | null;
-}
-
-export async function listCreatorSummaries(): Promise<CreatorSummary[]> {
-  const { data, error } = await db.from("creators").select("id, creator_name").order("creator_name");
-  if (error) fail(error);
-  return (data || []) as CreatorSummary[];
 }
 
 export async function createCreator(input: Partial<Creator>) {
@@ -79,15 +110,7 @@ export async function deleteCreator(id: string) {
 // ---------- Companies ----------
 
 export async function listCompanies(): Promise<Company[]> {
-  const { data, error } = await db.from("companies").select("*").order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as Company[];
-}
-
-export async function listCompanySummaries(): Promise<CompanySummary[]> {
-  const { data, error } = await db.from("companies").select("id, name").order("name");
-  if (error) fail(error);
-  return (data || []) as CompanySummary[];
+  return rows(db.from("companies").select("*").order("created_at", { ascending: false }));
 }
 
 export async function createCompany(input: Partial<Company>) {
@@ -113,29 +136,69 @@ export async function deleteCompany(id: string) {
 
 // ---------- Deals ----------
 
+type RawDealRow = Deal & {
+  companies: CompanySummary | null;
+  deal_creators: { creators: CreatorSummary | null }[];
+};
+
+function withCreators({ deal_creators, ...deal }: RawDealRow): DealWithRefs {
+  return { ...deal, creators: (deal_creators ?? []).map((x) => x.creators).filter((c): c is CreatorSummary => !!c) };
+}
+
 export async function listDeals(): Promise<DealWithRefs[]> {
-  const { data, error } = await db.from("deals").select("*, creators(id, creator_name), companies(id, name)").order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as DealWithRefs[];
+  const data = await rows<RawDealRow>(
+    db
+      .from("deals")
+      .select("*, companies(id, name), deal_creators(creators(id, creator_name))")
+      .order("created_at", { ascending: false })
+  );
+  return data.map((d) => {
+    const deal = withCreators(d);
+    deal.creators.sort((a, b) => a.creator_name.localeCompare(b.creator_name));
+    return deal;
+  });
 }
 
 export async function listDealsByCreator(creatorId: string): Promise<Deal[]> {
-  const { data, error } = await db.from("deals").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as Deal[];
+  return rows(
+    db
+      .from("deals")
+      .select("*, deal_creators!inner(creator_id)")
+      .eq("deal_creators.creator_id", creatorId)
+      .order("created_at", { ascending: false })
+  );
 }
 
-export async function createDeal(input: Partial<Deal>) {
+export async function createDeal(input: Partial<Deal>, creatorIds: string[]) {
   await requireAdmin();
-  const { error } = await db.from("deals").insert([input]);
+  if (creatorIds.length === 0) throw new Error("Please select at least one creator");
+
+  const { data, error } = await db.from("deals").insert([input]).select("id").single();
   if (error) fail(error);
+
+  const { error: linkError } = await db
+    .from("deal_creators")
+    .insert(creatorIds.map((creator_id) => ({ deal_id: (data as { id: string }).id, creator_id })));
+  if (linkError) fail(linkError);
+
   revalidateAll();
 }
 
-export async function updateDeal(id: string, input: Partial<Deal>) {
+export async function updateDeal(id: string, input: Partial<Deal>, creatorIds?: string[]) {
   await requireAdmin();
   const { error } = await db.from("deals").update(input).eq("id", id);
   if (error) fail(error);
+
+  if (creatorIds) {
+    if (creatorIds.length === 0) throw new Error("Please select at least one creator");
+    const { error: deleteError } = await db.from("deal_creators").delete().eq("deal_id", id);
+    if (deleteError) fail(deleteError);
+    const { error: linkError } = await db
+      .from("deal_creators")
+      .insert(creatorIds.map((creator_id) => ({ deal_id: id, creator_id })));
+    if (linkError) fail(linkError);
+  }
+
   revalidateAll();
 }
 
@@ -149,15 +212,11 @@ export async function deleteDeal(id: string) {
 // ---------- Outreach ----------
 
 export async function listOutreach(): Promise<OutreachWithCreator[]> {
-  const { data, error } = await db.from("outreach").select("*, creators(id, creator_name)").order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as OutreachWithCreator[];
+  return rows(db.from("outreach").select("*, creators(id, creator_name)").order("created_at", { ascending: false }));
 }
 
 export async function listOutreachByCreator(creatorId: string): Promise<Outreach[]> {
-  const { data, error } = await db.from("outreach").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as Outreach[];
+  return rows(db.from("outreach").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false }));
 }
 
 export async function createOutreach(input: Partial<Outreach>) {
@@ -184,15 +243,11 @@ export async function deleteOutreach(id: string) {
 // ---------- Contracts ----------
 
 export async function listContracts(): Promise<ContractWithCreator[]> {
-  const { data, error } = await db.from("contracts").select("*, creators(id, creator_name)").order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as ContractWithCreator[];
+  return rows(db.from("contracts").select("*, creators(id, creator_name)").order("created_at", { ascending: false }));
 }
 
 export async function listContractsByCreator(creatorId: string): Promise<Contract[]> {
-  const { data, error } = await db.from("contracts").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false });
-  if (error) fail(error);
-  return (data || []) as Contract[];
+  return rows(db.from("contracts").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false }));
 }
 
 export async function createContract(input: Partial<Contract>) {
@@ -219,50 +274,15 @@ export async function deleteContract(id: string) {
 // ---------- Master Data ----------
 
 export async function listMasterData(): Promise<MasterDataRow[]> {
-  const { data: creators, error } = await db.from("creators").select("*").order("created_at", { ascending: false });
-  if (error) fail(error);
+  const creators = await rows<Creator>(db.from("creators").select("*").order("created_at", { ascending: false }));
+  const outreach = await rows<OutreachRow>(db.from("outreach").select(OUTREACH_COLUMNS));
+  const contracts = await rows<ContractRow>(db.from("contracts").select("creator_id, contract_status, created_at"));
 
-  const { data: outreach, error: outreachError } = await db
-    .from("outreach")
-    .select("creator_id, date_contacted, next_follow_up_date, current_status, outcome, created_at");
-  if (outreachError) fail(outreachError);
+  const outreachByCreator = groupByCreator(outreach);
+  const contractsByCreator = groupByCreator(contracts);
 
-  const { data: contracts, error: contractsError } = await db
-    .from("contracts")
-    .select("creator_id, contract_status, created_at");
-  if (contractsError) fail(contractsError);
-
-  type O = {
-    creator_id: string | null;
-    date_contacted: string | null;
-    next_follow_up_date: string | null;
-    current_status: string | null;
-    outcome: string | null;
-    created_at: string;
-  };
-  type K = { creator_id: string | null; contract_status: string | null; created_at: string };
-
-  const outreachByCreator = new Map<string, O[]>();
-  for (const row of (outreach || []) as O[]) {
-    if (!row.creator_id) continue;
-    const list = outreachByCreator.get(row.creator_id) ?? [];
-    list.push(row);
-    outreachByCreator.set(row.creator_id, list);
-  }
-
-  const contractsByCreator = new Map<string, K[]>();
-  for (const row of (contracts || []) as K[]) {
-    if (!row.creator_id) continue;
-    const list = contractsByCreator.get(row.creator_id) ?? [];
-    list.push(row);
-    contractsByCreator.set(row.creator_id, list);
-  }
-
-  return (creators || []).map((c) => {
-    const o = [...(outreachByCreator.get(c.id) ?? [])].sort(
-      (a, b) =>
-        (b.date_contacted ?? "").localeCompare(a.date_contacted ?? "") || b.created_at.localeCompare(a.created_at)
-    );
+  return creators.map((c) => {
+    const o = [...(outreachByCreator.get(c.id) ?? [])].sort(byRecency);
     const latest = o[0] ?? null;
     const k = [...(contractsByCreator.get(c.id) ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
     const contract = k[0] ?? null;
@@ -292,7 +312,6 @@ export type DashboardOverview = {
   totalDeals: number;
   totalRevenue: number;
   agencyCommission: number;
-  onHold: number;
   topCreators: (CreatorSummary & { total_deal_value: number; total_followers: number; engagement_rate: number })[];
   recentOutreach: OutreachWithCreator[];
 };
@@ -300,58 +319,39 @@ export type DashboardOverview = {
 const PIPELINE_ORDER = ["Prospect", "Contacted", "Negotiating", "Signed", "Rejected", "On Hold"];
 const DEAL_STATUS_ORDER = ["Pitched", "Confirmed", "In Progress", "Completed", "Cancelled"];
 
-export async function getDashboardOverview(): Promise<DashboardOverview> {
-  const { data: creators, error: creatorsError } = await db.from("creators").select("id");
-  if (creatorsError) fail(creatorsError);
+export async function getDashboardOverview(filter?: FilterCondition[]): Promise<DashboardOverview> {
+  const scoped = scopeConditions(filter ?? [], "all");
+  const active = scoped.length > 0 ? scoped : null;
+  const creators = active
+    ? await rows<Creator>(db.from("creators").select("*"))
+    : await rows<Creator>(
+        db.from("creators").select("id, creator_name, followers_instagram, followers_youtube, engagement_rate")
+      );
+  const matchingIds = active
+    ? new Set(creators.filter(c => matchesFilter(c as unknown as Record<string, unknown>, active)).map(c => c.id))
+    : null;
+  const included = (id: string) => !matchingIds || matchingIds.has(id);
+  const outreach = await rows<OutreachRow>(db.from("outreach").select(OUTREACH_COLUMNS));
+  const contracts = await rows<ContractRow>(db.from("contracts").select("creator_id, contract_status, created_at"));
+  const deals = await rows<Pick<Deal, "id" | "deal_value" | "agency_commission" | "campaign_status">>(
+    db.from("deals").select("id, deal_value, agency_commission, campaign_status")
+  );
+  const dealCreators = await rows<{ deal_id: string; creator_id: string }>(
+    db.from("deal_creators").select("deal_id, creator_id")
+  );
 
-  const { data: outreach, error: outreachError } = await db
-    .from("outreach")
-    .select("creator_id, current_status, date_contacted, next_follow_up_date, created_at");
-  if (outreachError) fail(outreachError);
+  const outreachByCreator = groupByCreator(outreach);
+  const contractsByCreator = groupByCreator(contracts);
 
-  const { data: contracts, error: contractsError } = await db
-    .from("contracts")
-    .select("creator_id, contract_status, created_at");
-  if (contractsError) fail(contractsError);
-
-  const { data: deals, error: dealsError } = await db
-    .from("deals")
-    .select("deal_value, agency_commission, campaign_status");
-  if (dealsError) fail(dealsError);
-
-  type O = {
-    creator_id: string | null;
-    current_status: string | null;
-    date_contacted: string | null;
-    next_follow_up_date: string | null;
-    created_at: string;
-  };
-  type K = { creator_id: string | null; contract_status: string | null; created_at: string };
-
-  const outreachByCreator = new Map<string, O[]>();
-  for (const row of (outreach || []) as O[]) {
-    if (!row.creator_id) continue;
-    const list = outreachByCreator.get(row.creator_id) ?? [];
-    list.push(row);
-    outreachByCreator.set(row.creator_id, list);
-  }
-
-  const contractsByCreator = new Map<string, K[]>();
-  for (const row of (contracts || []) as K[]) {
-    if (!row.creator_id) continue;
-    const list = contractsByCreator.get(row.creator_id) ?? [];
-    list.push(row);
-    contractsByCreator.set(row.creator_id, list);
-  }
+  const visibleOutreach = matchingIds
+    ? outreach.filter(o => o.creator_id != null && matchingIds.has(o.creator_id))
+    : outreach;
 
   const pipeline = new Map<string, number>(PIPELINE_ORDER.map((label) => [label, 0] as const));
 
-  for (const c of (creators || []) as { id: string }[]) {
-    const out = [...(outreachByCreator.get(c.id) ?? [])].sort(
-      (a, b) =>
-        (b.date_contacted ?? "").localeCompare(a.date_contacted ?? "") || b.created_at.localeCompare(a.created_at)
-    );
-    const latest = out[0] ?? null;
+  for (const c of creators) {
+    if (!included(c.id)) continue;
+    const latest = [...(outreachByCreator.get(c.id) ?? [])].sort(byRecency)[0] ?? null;
     const cons = contractsByCreator.get(c.id) ?? [];
     const hasActive = cons.some((k) => k.contract_status === "Active");
     const hasDraft = cons.some((k) => k.contract_status === "Draft");
@@ -375,7 +375,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   horizon.setDate(horizon.getDate() + 7);
 
   let followUpsIn7Days = 0;
-  for (const row of (outreach || []) as O[]) {
+  for (const row of visibleOutreach) {
     if (!row.next_follow_up_date) continue;
     const d = new Date(`${row.next_follow_up_date}T00:00:00`);
     if (!isNaN(d.getTime()) && d >= today && d <= horizon) followUpsIn7Days++;
@@ -385,8 +385,14 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   let totalDeals = 0;
   let totalRevenue = 0;
   let agencyCommission = 0;
+  const dealValuesByCreator = new Map<string, number>();
 
-  for (const d of (deals || []) as { deal_value: number | null; agency_commission: number | null; campaign_status: string | null }[]) {
+  const dealIds = matchingIds
+    ? new Set(dealCreators.filter(dc => matchingIds.has(dc.creator_id)).map(dc => dc.deal_id))
+    : null;
+
+  for (const d of deals) {
+    if (dealIds && !dealIds.has(d.id)) continue;
     totalDeals++;
     totalRevenue += Number(d.deal_value || 0);
     agencyCommission += Number(d.agency_commission || 0);
@@ -394,69 +400,38 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     dealStatus.set(label, (dealStatus.get(label) ?? 0) + 1);
   }
 
-  const [creatorSummaries, recentOutreach] = await Promise.all([listCreatorSummaries(), listOutreach()]);
-
-  const { data: allCreators } = await db.from("creators").select("id, creator_name, followers_instagram, followers_youtube, engagement_rate");
-  const { data: allDeals } = await db.from("deals").select("creator_id, deal_value");
-
-  const creatorMap = new Map<string, { followers_instagram: number; followers_youtube: number; engagement_rate: number }>();
-  for (const c of (allCreators || []) as { id: string; followers_instagram: number | null; followers_youtube: number | null; engagement_rate: number | null }[]) {
-    creatorMap.set(c.id, {
-      followers_instagram: Number(c.followers_instagram || 0),
-      followers_youtube: Number(c.followers_youtube || 0),
-      engagement_rate: Number(c.engagement_rate || 0),
-    });
+  const dealValueById = new Map(deals.map((d) => [d.id, Number(d.deal_value || 0)]));
+  for (const dc of dealCreators) {
+    const value = dealValueById.get(dc.deal_id) ?? 0;
+    dealValuesByCreator.set(dc.creator_id, (dealValuesByCreator.get(dc.creator_id) ?? 0) + value);
   }
 
-  const dealValuesByCreator = new Map<string, number>();
-  for (const d of (allDeals || []) as { creator_id: string | null; deal_value: number | null }[]) {
-    if (!d.creator_id) continue;
-    dealValuesByCreator.set(d.creator_id, (dealValuesByCreator.get(d.creator_id) ?? 0) + Number(d.deal_value || 0));
-  }
+  const allOutreach = await listOutreach();
+  const recentOutreach = matchingIds
+    ? allOutreach.filter(o => o.creators != null && matchingIds.has(o.creators.id))
+    : allOutreach;
 
-  const topCreators = creatorSummaries.map((cs) => {
-    const info = creatorMap.get(cs.id);
-    return {
-      ...cs,
-      total_deal_value: dealValuesByCreator.get(cs.id) ?? 0,
-      total_followers: (info?.followers_instagram ?? 0) + (info?.followers_youtube ?? 0),
-      engagement_rate: info?.engagement_rate ?? 0,
-    };
-  });
+  const topCreators = creators
+    .filter(c => included(c.id))
+    .map((c) => ({
+      id: c.id,
+      creator_name: c.creator_name,
+      total_deal_value: dealValuesByCreator.get(c.id) ?? 0,
+      total_followers: (c.followers_instagram ?? 0) + (c.followers_youtube ?? 0),
+      engagement_rate: c.engagement_rate ?? 0,
+    }));
 
   return {
-    creatorsCount: (creators || []).length,
+    creatorsCount: matchingIds ? matchingIds.size : creators.length,
     pipeline: PIPELINE_ORDER.map((label) => ({ label, value: pipeline.get(label) ?? 0 })),
     dealStatus: DEAL_STATUS_ORDER.map((label) => ({ label, value: dealStatus.get(label) ?? 0 })),
     followUpsIn7Days,
     totalDeals,
     totalRevenue,
     agencyCommission,
-    onHold: 0,
     topCreators,
     recentOutreach,
   };
-}
-
-export async function getDashboardStats(): Promise<DashboardStat[]> {
-  const results: DashboardStat[] = [];
-
-  const { count: creatorsCount } = await db.from("creators").select("id", { count: "exact" });
-  results.push({ label: "Total Creators", value: creatorsCount || 0 });
-
-  const { data: outreach } = await db.from("outreach").select("creator_id");
-  results.push({ label: "Creators Contacted", value: new Set((outreach || []).map((r) => r.creator_id)).size });
-
-  const { data: contracts } = await db.from("contracts").select("creator_id");
-  results.push({ label: "Signed Creators", value: new Set((contracts || []).map((r) => r.creator_id)).size });
-
-  const { count: dealsCount } = await db.from("deals").select("id", { count: "exact" });
-  results.push({ label: "Total Brand Deals", value: dealsCount || 0 });
-
-  const { data: revenue } = await db.from("deals").select("deal_value");
-  results.push({ label: "Total Revenue", value: (revenue || []).reduce((s: number, r) => s + Number(r.deal_value || 0), 0) });
-
-  return results;
 }
 
 // ---------- Presence ----------
@@ -469,7 +444,7 @@ export async function setPresenceStatus(status: PresenceStatus) {
     .from("user_status")
     .upsert({
       user_id: userId,
-      workspace_id: "00000000-0000-0000-0000-000000000001",
+      workspace_id: DEFAULT_WORKSPACE_ID,
       status_override: status,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,workspace_id" });
@@ -481,16 +456,12 @@ export async function setPresenceStatus(status: PresenceStatus) {
 
 // ---------- Settings ----------
 
-const DEFAULT_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001";
-
 export type SettingsRole = "admin" | "member" | "viewer";
 export type WorkspaceInfo = { id: string; name: string };
 
 export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
   await requireUser();
-  const { data, error } = await db.from("workspaces").select("id, name").order("created_at");
-  if (error) fail(error);
-  return (data || []) as WorkspaceInfo[];
+  return rows(db.from("workspaces").select("id, name").order("created_at"));
 }
 
 export async function updateWorkspaceName(workspaceId: string, name: string) {
@@ -567,5 +538,100 @@ export async function updateNotificationPreferences(input: NotificationPreferenc
       ...input,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,workspace_id" });
+  if (error) fail(error);
+}
+
+// ---------- Custom filters ----------
+
+type CustomFilterRecord = {
+  id: string;
+  name: string;
+  visibility: string;
+  conditions: unknown;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+function normalizeFilter(row: CustomFilterRecord): CustomFilter {
+  return {
+    id: row.id,
+    name: row.name,
+    visibility: row.visibility === "org" ? "org" : "personal",
+    conditions: Array.isArray(row.conditions) ? (row.conditions as FilterCondition[]) : [],
+    created_by: row.created_by,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+async function assertCanEditFilter(row: CustomFilterRecord) {
+  if (row.visibility === "org") {
+    await requireAdmin();
+    return;
+  }
+  const userId = await requireUser();
+  if (row.created_by !== userId) throw new Error("You can only modify your own filters");
+}
+
+export async function listCustomFilters(): Promise<CustomFilter[]> {
+  const userId = await requireUser();
+  const data = await rows<CustomFilterRecord>(
+    db.from("custom_filters").select("*").order("created_at", { ascending: false })
+  );
+  return data
+    .map(normalizeFilter)
+    .filter((f) => f.visibility === "org" || f.created_by === userId);
+}
+
+export async function createCustomFilter(input: {
+  name: string;
+  visibility: FilterVisibility;
+  conditions: FilterCondition[];
+}) {
+  const userId = await requireUser();
+  const name = input.name.trim();
+  if (!name) throw new Error("Name is required");
+  const validationError = validateConditions(input.conditions);
+  if (validationError) throw new Error(validationError);
+  if (input.visibility === "org") await requireAdmin();
+
+  await ensureUserRow(userId);
+  const { error } = await db.from("custom_filters").insert({
+    name,
+    visibility: input.visibility,
+    conditions: input.conditions,
+    created_by: userId,
+  });
+  if (error) fail(error);
+}
+
+export async function updateCustomFilter(
+  id: string,
+  input: { name: string; visibility: FilterVisibility; conditions: FilterCondition[] }
+) {
+  const name = input.name.trim();
+  if (!name) throw new Error("Name is required");
+  const validationError = validateConditions(input.conditions);
+  if (validationError) throw new Error(validationError);
+
+  const { data, error: fetchError } = await db.from("custom_filters").select("*").eq("id", id).single();
+  if (fetchError || !data) throw new Error("Filter not found");
+  const existing = data as CustomFilterRecord;
+  await assertCanEditFilter(existing);
+  if (input.visibility === "org" && existing.visibility !== "org") await requireAdmin();
+
+  const { error } = await db
+    .from("custom_filters")
+    .update({ name, visibility: input.visibility, conditions: input.conditions, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) fail(error);
+}
+
+export async function deleteCustomFilter(id: string) {
+  const { data, error: fetchError } = await db.from("custom_filters").select("*").eq("id", id).single();
+  if (fetchError || !data) throw new Error("Filter not found");
+  await assertCanEditFilter(data as CustomFilterRecord);
+  const { error } = await db.from("custom_filters").delete().eq("id", id);
   if (error) fail(error);
 }
