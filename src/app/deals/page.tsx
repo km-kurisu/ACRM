@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { useUser } from "@clerk/nextjs";
-import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, MoreVertical, Pencil, Trash2, Users, Building2 } from "lucide-react";
 import { Deal, Creator, Company } from "@/lib/types";
 import { createDeal, deleteDeal, listDeals, listCreators, listCompanies, updateDeal, type DealWithRefs } from "@/actions";
 import { DEAL_STATUS_COLORS } from "@/lib/colors";
@@ -28,8 +28,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { Checkbox } from "@/components/ui/checkbox";
 
 type DealForm = {
   creator_ids: string[];
@@ -216,56 +218,65 @@ export default function DealsPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label>Creators * (select one or more)</Label>
-                <div className="glass max-h-48 overflow-y-auto rounded-lg border border-border/40 p-3">
-                  {creators.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No creators available.</p>
-                  )}
-                  {creators.map((c) => (
-                    <label
-                      key={c.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
-                    >
-                      <Checkbox
+                <Label>Creators *</Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="secondary" className="glass w-fit">
+                      <Users className="size-4" />
+                      Creators
+                      {form.creator_ids.length > 0 && (
+                        <Badge className="ml-1 h-5 min-w-5 px-1 tabular-nums">{form.creator_ids.length}</Badge>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="glass-strong max-h-80 w-64 overflow-y-auto">
+                    {creators.length === 0 && (
+                      <p className="px-2 py-6 text-center text-xs text-muted-foreground">No creators available.</p>
+                    )}
+                    {creators.map((c) => (
+                      <DropdownMenuCheckboxItem
+                        key={c.id}
                         checked={form.creator_ids.includes(c.id)}
+                        onSelect={(e) => e.preventDefault()}
                         onCheckedChange={() => toggleCreator(c.id)}
-                      />
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
-                          {c.creator_name.charAt(0).toUpperCase()}
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
+                            {c.creator_name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="truncate">{c.creator_name}</span>
                         </span>
-                        <span className="truncate">{c.creator_name}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                {form.creator_ids.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {form.creator_ids.length} creator{form.creator_ids.length > 1 ? "s" : ""} will be linked to this deal
-                  </p>
-                )}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label>Company *</Label>
-                  <div className="glass rounded-lg border border-border/40 p-3">
-                    {companyOptions.map((c) => (
-                      <label
-                        key={c.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
-                      >
-                        <Checkbox
-                          checked={form.company_id === c.id}
-                          onCheckedChange={() => set({ company_id: c.id })}
-                        />
-                        <span>{c.label}</span>
-                      </label>
-                    ))}
-                    {companyOptions.length === 0 && (
-                      <p className="text-xs text-muted-foreground">No companies available.</p>
-                    )}
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="secondary" className="glass w-full justify-start font-normal">
+                        <Building2 className="size-4 shrink-0" />
+                        <span className="truncate">
+                          {companyOptions.find((c) => c.id === form.company_id)?.label ?? "Select company"}
+                        </span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="glass-strong max-h-80 w-64 overflow-y-auto">
+                      {companyOptions.length === 0 && (
+                        <p className="px-2 py-6 text-center text-xs text-muted-foreground">No companies available.</p>
+                      )}
+                      <DropdownMenuRadioGroup value={form.company_id} onValueChange={(v) => set({ company_id: v })}>
+                        {companyOptions.map((c) => (
+                          <DropdownMenuRadioItem key={c.id} value={c.id}>
+                            <span className="truncate">{c.label}</span>
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
