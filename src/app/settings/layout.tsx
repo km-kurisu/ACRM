@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings, Users, Palette, Bell, ShieldCheck } from "lucide-react";
+import { Settings, Users, Palette, Bell, ShieldCheck, ListFilter } from "lucide-react";
 import { useRole } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ const SECTIONS = [
   { href: "/settings", label: "General", icon: Settings },
   { href: "/settings/team", label: "Team Members", icon: Users, adminOnly: true },
   { href: "/settings/appearance", label: "Appearance", icon: Palette },
+  { href: "/settings/filters", label: "Custom Filters", icon: ListFilter },
   { href: "/settings/notifications", label: "Notifications", icon: Bell },
 ];
 
