@@ -575,11 +575,13 @@ async function assertCanEditFilter(row: CustomFilterRecord) {
 }
 
 export async function listCustomFilters(): Promise<CustomFilter[]> {
-  await requireUser();
+  const userId = await requireUser();
   const data = await rows<CustomFilterRecord>(
     db.from("custom_filters").select("*").order("created_at", { ascending: false })
   );
-  return data.map(normalizeFilter);
+  return data
+    .map(normalizeFilter)
+    .filter((f) => f.visibility === "org" || f.created_by === userId);
 }
 
 export async function createCustomFilter(input: {
