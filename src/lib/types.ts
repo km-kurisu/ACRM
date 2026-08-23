@@ -41,7 +41,6 @@ export type Company = {
 
 export type Deal = {
   id: string;
-  creator_id: string | null;
   company_id: string | null;
   campaign: string | null;
   deal_value?: number | null;

@@ -57,45 +57,19 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import type { Creator, Outreach, Contract, Deal, Company } from "@/lib/types";
-import { Checkbox } from "@/components/ui/checkbox";
-
-const PRIORITY_COLORS: Record<string, string> = {
-  High: "bg-foreground/10 text-foreground",
-  Medium: "bg-muted text-muted-foreground",
-  Low: "bg-border/60 text-muted-foreground",
-};
-
-const LANGUAGE_OPTIONS = [
-  "English", "Hindi", "Japanese", "Korean", "Chinese (Mandarin)", "Spanish", "Portuguese",
-  "French", "German", "Italian", "Russian", "Arabic", "Thai", "Vietnamese", "Indonesian",
-  "Tagalog", "Bengali", "Tamil", "Telugu", "Marathi", "Gujarati", "Punjabi", "Urdu",
-];
-
-const OUTREACH_STATUS_COLORS: Record<string, string> = {
-  Negotiating: "bg-foreground/10 text-foreground",
-  Interested: "bg-foreground/10 text-foreground",
-  Signed: "bg-foreground/10 text-foreground",
-  "Awaiting Reply": "bg-foreground/15 text-foreground",
-  "On Hold": "bg-foreground/15 text-foreground",
-  "Not Interested": "bg-muted text-muted-foreground line-through",
-  "No Response": "bg-muted text-muted-foreground",
-};
-
-const CONTRACT_STATUS_COLORS: Record<string, string> = {
-  Active: "bg-foreground/10 text-foreground",
-  Draft: "bg-muted text-muted-foreground",
-  Renewed: "bg-foreground/10 text-foreground",
-  Expired: "bg-muted text-muted-foreground",
-  Terminated: "bg-border/60 text-muted-foreground line-through",
-};
-
-const DEAL_STATUS_COLORS: Record<string, string> = {
-  Pitched: "bg-muted text-muted-foreground",
-  "In Progress": "bg-foreground/10 text-foreground",
-  Confirmed: "bg-foreground/10 text-foreground",
-  Completed: "bg-muted text-muted-foreground",
-  Cancelled: "bg-border/60 text-muted-foreground line-through",
-};
+import {
+  CONTRACT_STATUS_COLORS,
+  DEAL_STATUS_COLORS,
+  OUTREACH_STATUS_COLORS,
+  PRIORITY_COLORS,
+} from "@/lib/colors";
+import {
+  EMPTY_CREATOR_FORM,
+  CreatorFormFields,
+  creatorFormFromRow,
+  toCreatorPayload,
+  type CreatorFormValues,
+} from "@/components/creator-form";
 
 export default function CreatorDetailPage() {
   const params = useParams();
@@ -112,31 +86,7 @@ export default function CreatorDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [creatorDialogOpen, setCreatorDialogOpen] = useState(false);
-  const [creatorForm, setCreatorForm] = useState({
-    creator_name: "",
-    creator_type: "",
-    instagram: "",
-    youtube: "",
-    x_twitter: "",
-    email: "",
-    phone_number: "",
-    city: "",
-    state: "",
-    country: "",
-    niche: "",
-    followers_instagram: "",
-    followers_youtube: "",
-    engagement_rate: "",
-    primary_content_type: "",
-    languages: "",
-    interested_in_exclusive_mgmt: "No",
-    rate_card_received: false,
-    gst_available: false,
-    payment_details_received: false,
-    priority: "Medium",
-    assigned_manager: "",
-    notes: "",
-  });
+  const [creatorForm, setCreatorForm] = useState<CreatorFormValues>(EMPTY_CREATOR_FORM);
 
   const [outreachDialogOpen, setOutreachDialogOpen] = useState(false);
   const [outreachEditing, setOutreachEditing] = useState<Outreach | null>(null);
@@ -202,44 +152,16 @@ export default function CreatorDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    let cancelled = false;
     void (async () => {
       await load();
-      if (cancelled) return;
     })();
-    return () => { cancelled = true; };
   }, [load]);
 
   async function handleCreatorSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload: Partial<Creator> = {
-        creator_name: creatorForm.creator_name,
-        creator_type: creatorForm.creator_type || null,
-        instagram: creatorForm.instagram || null,
-        youtube: creatorForm.youtube || null,
-        x_twitter: creatorForm.x_twitter || null,
-        email: creatorForm.email || null,
-        phone_number: creatorForm.phone_number || null,
-        city: creatorForm.city || null,
-        state: creatorForm.state || null,
-        country: creatorForm.country || null,
-        niche: creatorForm.niche || null,
-        followers_instagram: creatorForm.followers_instagram ? Number(creatorForm.followers_instagram) : null,
-        followers_youtube: creatorForm.followers_youtube ? Number(creatorForm.followers_youtube) : null,
-        engagement_rate: creatorForm.engagement_rate ? Number(creatorForm.engagement_rate) : null,
-        primary_content_type: creatorForm.primary_content_type || null,
-        languages: creatorForm.languages || null,
-        interested_in_exclusive_mgmt: creatorForm.interested_in_exclusive_mgmt as Creator["interested_in_exclusive_mgmt"],
-        rate_card_received: creatorForm.rate_card_received ? "Yes" : "No",
-        gst_available: creatorForm.gst_available ? "Yes" : "No",
-        payment_details_received: creatorForm.payment_details_received ? "Yes" : "No",
-        priority: creatorForm.priority as Creator["priority"],
-        assigned_manager: creatorForm.assigned_manager || null,
-        notes: creatorForm.notes || null,
-      };
-      await updateCreator(id, payload);
+      await updateCreator(id, toCreatorPayload(creatorForm));
       toast.success("Creator updated");
       setCreatorDialogOpen(false);
       await load();
@@ -351,7 +273,6 @@ export default function CreatorDetailPage() {
     setSaving(true);
     try {
       const payload: Partial<Deal> = {
-        creator_id: id,
         company_id: dealForm.company_id || null,
         campaign: dealForm.campaign || null,
         deal_value: dealForm.deal_value ? Number(dealForm.deal_value) : null,
@@ -367,7 +288,7 @@ export default function CreatorDetailPage() {
         await updateDeal(dealEditing.id, payload);
         toast.success("Deal updated");
       } else {
-        await createDeal(payload);
+        await createDeal(payload, [id]);
         toast.success("Deal created");
       }
       setDealDialogOpen(false);
@@ -437,31 +358,7 @@ export default function CreatorDetailPage() {
               variant="secondary"
               className="glass"
               onClick={() => {
-                setCreatorForm({
-                  creator_name: creator.creator_name,
-                  creator_type: creator.creator_type ?? "",
-                  instagram: creator.instagram ?? "",
-                  youtube: creator.youtube ?? "",
-                  x_twitter: creator.x_twitter ?? "",
-                  email: creator.email ?? "",
-                  phone_number: creator.phone_number ?? "",
-                  city: creator.city ?? "",
-                  state: creator.state ?? "",
-                  country: creator.country ?? "",
-                  niche: creator.niche ?? "",
-                  followers_instagram: creator.followers_instagram != null ? String(creator.followers_instagram) : "",
-                  followers_youtube: creator.followers_youtube != null ? String(creator.followers_youtube) : "",
-                  engagement_rate: creator.engagement_rate != null ? String(creator.engagement_rate) : "",
-                  primary_content_type: creator.primary_content_type ?? "",
-                  languages: creator.languages ?? "",
-                  interested_in_exclusive_mgmt: creator.interested_in_exclusive_mgmt ?? "No",
-                  rate_card_received: creator.rate_card_received === "Yes",
-                  gst_available: creator.gst_available === "Yes",
-                  payment_details_received: creator.payment_details_received === "Yes",
-                  priority: creator.priority ?? "Medium",
-                  assigned_manager: creator.assigned_manager ?? "",
-                  notes: creator.notes ?? "",
-                });
+                setCreatorForm(creatorFormFromRow(creator));
                 setCreatorDialogOpen(true);
               }}
             >
@@ -482,169 +379,7 @@ export default function CreatorDetailPage() {
             <DialogDescription>Update the creator&apos;s details.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreatorSubmit} className="grid gap-5">
-            {/* Basic Info */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label>Creator Name *</Label>
-                <Input required value={creatorForm.creator_name} onChange={(e) => setCreatorForm((p) => ({ ...p, creator_name: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Creator Type</Label>
-                <select value={creatorForm.creator_type} onChange={(e) => setCreatorForm((p) => ({ ...p, creator_type: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                  <option value="">—</option>
-                  <option value="Individual">Individual</option>
-                  <option value="Agency">Agency</option>
-                  <option value="MCN">MCN</option>
-                  <option value="Brand">Brand</option>
-                  <option value="Studio">Studio</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Contact */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label>Email</Label>
-                <Input type="email" value={creatorForm.email} onChange={(e) => setCreatorForm((p) => ({ ...p, email: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Phone</Label>
-                <Input value={creatorForm.phone_number} onChange={(e) => setCreatorForm((p) => ({ ...p, phone_number: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* Location */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label>City</Label>
-                <Input value={creatorForm.city} onChange={(e) => setCreatorForm((p) => ({ ...p, city: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>State</Label>
-                <Input value={creatorForm.state} onChange={(e) => setCreatorForm((p) => ({ ...p, state: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Country</Label>
-                <Input value={creatorForm.country} onChange={(e) => setCreatorForm((p) => ({ ...p, country: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* Social Media */}
-            <div className="grid gap-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Social Media</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label>Instagram</Label>
-                <Input value={creatorForm.instagram} onChange={(e) => setCreatorForm((p) => ({ ...p, instagram: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>YouTube</Label>
-                <Input value={creatorForm.youtube} onChange={(e) => setCreatorForm((p) => ({ ...p, youtube: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>X (Twitter)</Label>
-                <Input value={creatorForm.x_twitter} onChange={(e) => setCreatorForm((p) => ({ ...p, x_twitter: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* Content & Niche */}
-            <div className="grid gap-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content &amp; Niche</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2 sm:col-span-2">
-                <Label>Niche</Label>
-                <select value={creatorForm.niche} onChange={(e) => setCreatorForm((p) => ({ ...p, niche: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                  <option value="">—</option>
-                  <option value="Cosplay">Cosplay</option>
-                  <option value="Fan Art / Illustration">Fan Art / Illustration</option>
-                  <option value="AMV Editing">AMV Editing</option>
-                  <option value="Anime Commentary / Review">Anime Commentary / Review</option>
-                  <option value="Voice Acting / Dubbing">Voice Acting / Dubbing</option>
-                  <option value="Anime News">Anime News</option>
-                  <option value="Figure Collecting">Figure Collecting</option>
-                  <option value="Manga Content">Manga Content</option>
-                  <option value="Gaming + Anime">Gaming + Anime</option>
-                  <option value="Anime Merch Reviews">Anime Merch Reviews</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Languages</Label>
-              <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border border-input bg-background p-3">
-                {LANGUAGE_OPTIONS.map((lang) => (
-                  <Label key={lang} className="flex items-center gap-1.5 text-sm font-normal">
-                    <Checkbox
-                      checked={creatorForm.languages.split(", ").filter(Boolean).includes(lang)}
-                      onCheckedChange={(checked) => {
-                        const current = creatorForm.languages.split(", ").filter(Boolean);
-                        const next = checked
-                          ? [...current, lang]
-                          : current.filter((l) => l !== lang);
-                        setCreatorForm((p) => ({ ...p, languages: next.join(", ") }));
-                      }}
-                    />
-                    {lang}
-                  </Label>
-                ))}
-              </div>
-            </div>
-
-            {/* Metrics */}
-            <div className="grid gap-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Metrics</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label>Followers (Instagram)</Label>
-                <Input type="number" min={0} value={creatorForm.followers_instagram} onChange={(e) => setCreatorForm((p) => ({ ...p, followers_instagram: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Followers (YouTube)</Label>
-                <Input type="number" min={0} value={creatorForm.followers_youtube} onChange={(e) => setCreatorForm((p) => ({ ...p, followers_youtube: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Engagement Rate (%)</Label>
-                <Input type="number" min={0} step="0.1" value={creatorForm.engagement_rate} onChange={(e) => setCreatorForm((p) => ({ ...p, engagement_rate: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* Management */}
-            <div className="grid gap-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Management</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label>Priority</Label>
-                <select value={creatorForm.priority} onChange={(e) => setCreatorForm((p) => ({ ...p, priority: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                </select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Exclusive Mgmt Interest</Label>
-                <select value={creatorForm.interested_in_exclusive_mgmt} onChange={(e) => setCreatorForm((p) => ({ ...p, interested_in_exclusive_mgmt: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                  <option value="Maybe">Maybe</option>
-                </select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Assigned Manager</Label>
-                <Input value={creatorForm.assigned_manager} onChange={(e) => setCreatorForm((p) => ({ ...p, assigned_manager: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="grid gap-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Notes</p>
-            </div>
-            <div className="grid gap-2">
-              <Label>Notes</Label>
-              <Input value={creatorForm.notes} onChange={(e) => setCreatorForm((p) => ({ ...p, notes: e.target.value }))} />
-            </div>
+            <CreatorFormFields values={creatorForm} onChange={(v) => setCreatorForm((p) => ({ ...p, ...v }))} />
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setCreatorDialogOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>

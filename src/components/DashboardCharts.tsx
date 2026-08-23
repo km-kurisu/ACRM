@@ -28,25 +28,38 @@ const TOOLTIP_STYLE: React.CSSProperties = {
   backdropFilter: "blur(12px)",
 };
 
-export function PipelinePieChart({ data }: { data: ChartDatum[] }) {
+export function DonutChart({
+  data,
+  height,
+  outerRadius,
+  caption,
+  filterZero = false,
+}: {
+  data: ChartDatum[];
+  height: number;
+  outerRadius: number;
+  caption: string;
+  filterZero?: boolean;
+}) {
+  const shown = filterZero ? data.filter((d) => d.value > 0) : data;
   const total = data.reduce((sum, d) => sum + d.value, 0);
   return (
     <div>
-      <div className="relative h-[260px] w-full">
+      <div className="relative w-full" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
-              data={data.filter((d) => d.value > 0)}
+              data={shown}
               dataKey="value"
               nameKey="label"
               cx="50%"
               cy="50%"
               innerRadius={62}
-              outerRadius={96}
+              outerRadius={outerRadius}
               paddingAngle={2}
               stroke="transparent"
             >
-              {data.filter((d) => d.value > 0).map((_, i) => (
+              {shown.map((_, i) => (
                 <Cell key={i} fill={GRAY_FILLS[i % GRAY_FILLS.length]} />
               ))}
             </Pie>
@@ -55,59 +68,11 @@ export function PipelinePieChart({ data }: { data: ChartDatum[] }) {
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <p className="text-3xl font-bold tabular-nums">{total}</p>
-          <p className="text-xs text-muted-foreground">Total creators</p>
+          <p className="text-xs text-muted-foreground">{caption}</p>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
-        {data.filter((d) => d.value > 0).map((d, i) => (
-          <span
-            key={d.label}
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
-          >
-            <span
-              className="size-2.5 shrink-0 rounded-full"
-              style={{ background: GRAY_FILLS[i % GRAY_FILLS.length] }}
-            />
-            {d.label} · {d.value}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function DealStatusDonutChart({ data }: { data: ChartDatum[] }) {
-  const total = data.reduce((sum, d) => sum + d.value, 0);
-  return (
-    <div>
-      <div className="relative h-[220px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="value"
-              nameKey="label"
-              cx="50%"
-              cy="50%"
-              innerRadius={62}
-              outerRadius={92}
-              paddingAngle={2}
-              stroke="transparent"
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={GRAY_FILLS[i % GRAY_FILLS.length]} />
-              ))}
-            </Pie>
-            <Tooltip contentStyle={TOOLTIP_STYLE} itemStyle={{ color: "var(--color-foreground)" }} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <p className="text-3xl font-bold tabular-nums">{total}</p>
-          <p className="text-xs text-muted-foreground">Total deals</p>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
-        {data.map((d, i) => (
+        {shown.map((d, i) => (
           <span
             key={d.label}
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"

@@ -6,6 +6,7 @@ import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Deal, Creator, Company } from "@/lib/types";
 import { createDeal, deleteDeal, listDeals, listCreators, listCompanies, updateDeal, type DealWithRefs } from "@/actions";
+import { DEAL_STATUS_COLORS } from "@/lib/colors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,14 +59,6 @@ const EMPTY: DealForm = {
   notes: "",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  Pitched: "bg-muted text-muted-foreground",
-  "In Progress": "bg-foreground/10 text-foreground",
-  Confirmed: "bg-foreground/10 text-foreground",
-  Completed: "bg-muted text-muted-foreground",
-  Cancelled: "bg-border/60 text-muted-foreground line-through",
-};
-
 const PAYMENT_COLORS: Record<string, string> = {
   Paid: "bg-foreground/10 text-foreground",
   Pending: "bg-muted text-muted-foreground",
@@ -105,33 +98,14 @@ export default function DealsPage() {
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
     void (async () => {
-      try {
-        const [dealData, creatorData, companyData] = await Promise.all([
-          listDeals(),
-          listCreators(),
-          listCompanies(),
-        ]);
-        if (cancelled) return;
-        setDeals(dealData);
-        setCreators(creatorData);
-        setCompanies(companyData);
-        setLoaded(true);
-      } catch {
-        if (!cancelled) toast.error("Could not load deals");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await load();
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [load]);
 
   const filtered = query.trim()
     ? deals.filter((d) =>
-        [d.campaign, d.creators?.creator_name, d.companies?.name, d.campaign_status, d.payment_status].some((v) =>
+        [d.campaign, d.creators.map((c) => c.creator_name).join(", "), d.companies?.name, d.campaign_status, d.payment_status].some((v) =>
           (v ?? "").toLowerCase().includes(query.toLowerCase())
         )
       )
@@ -173,21 +147,14 @@ export default function DealsPage() {
       };
 
       if (!basePayload.company_id) throw new Error("Please pick a company");
+      if (form.creator_ids.length === 0) throw new Error("Please select at least one creator");
 
       if (editing) {
-        const payload: Partial<Deal> = {
-          ...basePayload,
-          creator_id: form.creator_ids[0] || editing.creator_id,
-        };
-        await updateDeal(editing.id, payload);
-        toast.success(`Updated "${payload.campaign}"`);
+        await updateDeal(editing.id, basePayload, form.creator_ids);
+        toast.success(`Updated "${basePayload.campaign}"`);
       } else {
-        if (form.creator_ids.length === 0) throw new Error("Please select at least one creator");
-        for (const creatorId of form.creator_ids) {
-          const payload: Partial<Deal> = { ...basePayload, creator_id: creatorId };
-          await createDeal(payload);
-        }
-        toast.success(`Created ${form.creator_ids.length} deal${form.creator_ids.length > 1 ? "s" : ""}`);
+        await createDeal(basePayload, form.creator_ids);
+        toast.success(`Created "${basePayload.campaign}"`);
       }
       setDialogOpen(false);
       resetForm();
@@ -248,38 +215,36 @@ export default function DealsPage() {
                 <Input id="d-campaign" required value={form.campaign} onChange={(e) => set({ campaign: e.target.value })} />
               </div>
 
-              {!editing && (
-                <div className="grid gap-2">
-                  <Label>Creators * (select one or more)</Label>
-                  <div className="glass max-h-48 overflow-y-auto rounded-lg border border-border/40 p-3">
-                    {creators.length === 0 && (
-                      <p className="text-xs text-muted-foreground">No creators available.</p>
-                    )}
-                    {creators.map((c) => (
-                      <label
-                        key={c.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
-                      >
-                        <Checkbox
-                          checked={form.creator_ids.includes(c.id)}
-                          onCheckedChange={() => toggleCreator(c.id)}
-                        />
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
-                            {c.creator_name.charAt(0).toUpperCase()}
-                          </span>
-                          <span className="truncate">{c.creator_name}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  {form.creator_ids.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {form.creator_ids.length} creator{form.creator_ids.length > 1 ? "s" : ""} selected — a deal will be created for each
-                    </p>
+              <div className="grid gap-2">
+                <Label>Creators * (select one or more)</Label>
+                <div className="glass max-h-48 overflow-y-auto rounded-lg border border-border/40 p-3">
+                  {creators.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No creators available.</p>
                   )}
+                  {creators.map((c) => (
+                    <label
+                      key={c.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
+                    >
+                      <Checkbox
+                        checked={form.creator_ids.includes(c.id)}
+                        onCheckedChange={() => toggleCreator(c.id)}
+                      />
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
+                          {c.creator_name.charAt(0).toUpperCase()}
+                        </span>
+                        <span className="truncate">{c.creator_name}</span>
+                      </span>
+                    </label>
+                  ))}
                 </div>
-              )}
+                {form.creator_ids.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {form.creator_ids.length} creator{form.creator_ids.length > 1 ? "s" : ""} will be linked to this deal
+                  </p>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
@@ -402,7 +367,7 @@ export default function DealsPage() {
               <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="pl-6">Campaign</TableHead>
-                  <TableHead>Creator</TableHead>
+                  <TableHead>Creators</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead className="text-right">Value</TableHead>
                   <TableHead className="text-right">Commission</TableHead>
@@ -423,7 +388,19 @@ export default function DealsPage() {
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{deal.creators?.creator_name ?? "—"}</TableCell>
+                    <TableCell>
+                      {deal.creators.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {deal.creators.map((c) => (
+                            <Badge key={c.id} variant="outline" className="max-w-[160px] truncate">
+                              {c.creator_name}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{deal.companies?.name ?? "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {deal.deal_value != null ? `$${deal.deal_value.toLocaleString()}` : "—"}
@@ -432,7 +409,7 @@ export default function DealsPage() {
                       {deal.agency_commission != null ? `$${deal.agency_commission.toLocaleString()}` : "—"}
                     </TableCell>
                     <TableCell>
-                      <Badge className={STATUS_COLORS[deal.campaign_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+                      <Badge className={DEAL_STATUS_COLORS[deal.campaign_status ?? ""] ?? "bg-muted text-muted-foreground"}>
                         {deal.campaign_status || "—"}
                       </Badge>
                     </TableCell>
@@ -454,7 +431,7 @@ export default function DealsPage() {
                               onClick={() => {
                                 setEditing(deal);
                                 setForm({
-                                  creator_ids: deal.creator_id ? [deal.creator_id] : [],
+                                  creator_ids: deal.creators.map((c) => c.id),
                                   company_id: deal.company_id ?? "",
                                   campaign: deal.campaign ?? "",
                                   deal_value: deal.deal_value != null ? String(deal.deal_value) : "",
