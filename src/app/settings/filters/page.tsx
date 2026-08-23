@@ -18,6 +18,13 @@ export default function CustomFiltersSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomFilter | null>(null);
+  const [session, setSession] = useState(0);
+
+  function openDialog(filter: CustomFilter | null) {
+    setEditing(filter);
+    setSession((s) => s + 1);
+    setDialogOpen(true);
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -30,7 +37,9 @@ export default function CustomFiltersSettingsPage() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void (async () => {
+      await refresh();
+    })();
   }, [refresh]);
 
   async function handleDelete(filter: CustomFilter) {
@@ -53,10 +62,7 @@ export default function CustomFiltersSettingsPage() {
           <Button
             variant="secondary"
             className="glass"
-            onClick={() => {
-              setEditing(null);
-              setDialogOpen(true);
-            }}
+            onClick={() => openDialog(null)}
           >
             <Plus className="size-4" /> New Filter
           </Button>
@@ -87,10 +93,7 @@ export default function CustomFiltersSettingsPage() {
                   variant="ghost"
                   size="icon"
                   aria-label={`Edit ${f.name}`}
-                  onClick={() => {
-                    setEditing(f);
-                    setDialogOpen(true);
-                  }}
+                  onClick={() => openDialog(f)}
                 >
                   <Pencil className="size-4" />
                 </Button>
@@ -103,6 +106,7 @@ export default function CustomFiltersSettingsPage() {
         ))}
       </CardContent>
       <FilterDialog
+        key={session}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         initial={editing}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { createCustomFilter, updateCustomFilter } from "@/actions";
@@ -45,22 +45,17 @@ export function FilterDialog({
   isAdmin: boolean;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [visibility, setVisibility] = useState<FilterVisibility>("personal");
-  const [conditions, setConditions] = useState<FilterCondition[]>([emptyDraft()]);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setName(initial?.name ?? "");
-    setVisibility(initial?.visibility ?? "personal");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [visibility, setVisibility] = useState<FilterVisibility>(initial?.visibility ?? "personal");
+  const [conditions, setConditions] = useState<FilterCondition[]>(() => {
     const restored = (initial?.conditions ?? []).map((c) => ({
       field: c.field,
       op: c.op,
       value: c.value == null ? "" : String(c.value),
     }));
-    setConditions(restored.length > 0 ? restored : [emptyDraft()]);
-  }, [open, initial]);
+    return restored.length > 0 ? restored : [emptyDraft()];
+  });
+  const [saving, setSaving] = useState(false);
 
   const validationError = validateConditions(conditions);
   const groups = [...new Set(FILTERABLE_FIELDS.map((f) => f.group))];

@@ -210,7 +210,7 @@ function MasterDataInner() {
             <span className="hidden text-xs text-muted-foreground sm:inline">
               Scroll right to see all columns
             </span>
-            {activeIds.length > 0 && loaded && (
+            {activeConditions.length > 0 && loaded && (
               <span className="hidden text-xs text-muted-foreground md:inline">
                 {filtered.length} of {rows.length} shown
               </span>
