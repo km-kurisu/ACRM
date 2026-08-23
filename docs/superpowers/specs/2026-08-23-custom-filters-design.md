@@ -15,8 +15,10 @@ applied on both the dashboard aggregates and the master data table.
 - Admins create org-wide ("workspace") custom filters in Settings; every user
   can apply them.
 - Any user can create personal filters visible only to themselves.
-- Applying a filter narrows dashboard stats/charts/lists AND master data rows.
-- Filtered views are URL-addressable (`?filter=<id>`).
+- Applying filters narrows dashboard stats/charts/lists AND master data rows.
+- Multiple saved filters can be stacked; a row/aggregate must match ALL
+  selected filters (AND across filters, AND within each filter's conditions).
+- Filtered views are URL-addressable (`?filters=<id1,id2,...>`).
 
 ## Non-goals
 
@@ -24,7 +26,8 @@ applied on both the dashboard aggregates and the master data table.
   affected through their link to matching creators).
 - Adding pickers to `/creators`, `/deals`, `/outreach`, `/contracts` (the picker
   component will be reusable for these later).
-- OR logic between conditions, nested groups, or ad-hoc unsaved filters.
+- OR logic between filters or conditions, nested groups, or ad-hoc unsaved
+  filters.
 - SQL-level filter translation.
 
 ## Data model
@@ -178,17 +181,21 @@ Pure module, no React/server imports:
 ## Applying filters
 
 Shared picker component `src/components/CustomFilterPicker.tsx` (client):
-Select listing "All data" plus saved filters grouped Workspace / My filters.
-Selection writes `?filter=<id>` to the URL (`useRouter` + `useSearchParams`);
-"All data" removes the param.
+a Popover + checkbox list ("Filter" trigger button showing selected count)
+with saved filters grouped Workspace / My filters, plus a "Clear" action.
+Checking multiple boxes stacks them with AND semantics (row must satisfy every
+condition of every selected filter). Selection writes `?filters=<id1,id2,...>`
+to the URL (`useRouter` + `useSearchParams`); empty selection removes the
+param. Both surfaces read/write the same param so deep links are shared.
 
 ### Dashboard (server component)
 
 `src/app/dashboard/page.tsx` awaits `searchParams` (verify exact Next.js 16
 convention against `node_modules/next/dist/docs/` before implementing — this
-install may differ from older conventions). Resolves the filter id against
-`listCustomFilters()`; unknown/deleted ids fall back to no filter. Passes the
-matched filter's conditions into `getDashboardOverview(conditions)`.
+install may differ from older conventions). Parses the id list, resolves the
+ids against `listCustomFilters()`, skips unknown/deleted ids, and concatenates
+the matched filters' condition arrays into one flat list which is passed to
+`getDashboardOverview(conditions)`.
 
 Inside `getDashboardOverview`:
 1. When a filter is active, fetch creators with `select *` (filters may target
@@ -200,21 +207,21 @@ Inside `getDashboardOverview`:
    `deal_creators`) to ≥ 1 matching creator; deal status chart likewise.
 5. Top Creators built from matching creators only.
 
-UI: an active-filter chip next to the page title shows the filter name with a
-one-click clear (removes the param). The picker sits in the header area.
+UI: one removable chip per active filter next to the page title, each with a
+one-click ✕ that removes just that id from the param; a "clear all" on the
+picker. The picker sits in the header area.
 
 ### Master data (client component)
 
 `src/app/master-data/page.tsx` renders the same picker beside the existing
-search input. Rows are filtered by `matchesFilter` first, then the existing
-free-text search applies to the result. When a filter is active, show
-"N of M shown" near the toolbar. Selection reads/writes the same
-`?filter=<id>` param so both surfaces share deep links.
+search input. Rows are filtered by `matchesFilter` over the combined condition
+list first, then the existing free-text search applies to the result. When any
+filter is active, show "N of M shown" near the toolbar.
 
 ## Error handling
 
-- Stale or unknown `?filter=` id → silently unfiltered, picker resets to
-  "All data".
+- Stale or unknown ids inside `?filters=` → silently skipped; remaining valid
+  filters still apply; empty/fully-invalid list → unfiltered.
 - Malformed/stale conditions (unknown field/op) → skipped during evaluation;
   pages render normally.
 - Action failures surface via existing `toast.error(err.message)` pattern.
@@ -228,11 +235,11 @@ No test framework in the repo. Verification:
 1. `npx tsc --noEmit`
 2. `npm run lint`
 3. `npm run build`
-4. Manual smoke: create personal + workspace filters in Settings → apply on
-   dashboard (stats change accordingly) → apply on master data (rows narrow,
-   count shown) → delete a filter while it is applied elsewhere → graceful
-   fallback to All data → non-admin account sees only own filters and cannot
-   mutate workspace ones.
+4. Manual smoke: create personal + workspace filters in Settings → apply one on
+   the dashboard (stats change accordingly) → stack two filters on master data
+   (rows narrow further, count shown) → delete a filter while it is applied
+   elsewhere → graceful fallback → non-admin account sees only own filters and
+   cannot mutate workspace ones.
 
 ## Open implementation notes
 
