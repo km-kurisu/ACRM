@@ -125,6 +125,50 @@ create table if not exists public.deals (
 );
 
 -- ------------------------------------------------------------
+-- deal_creators — one deal can involve many creators
+-- ------------------------------------------------------------
+create table if not exists public.deal_creators (
+    deal_id text not null references public.deals(id) on delete cascade,
+    creator_id text not null references public.creators(id) on delete cascade,
+    primary key (deal_id, creator_id)
+);
+
+alter table public.deal_creators enable row level security;
+
+create policy "deal_creators select authenticated" on public.deal_creators
+    for select using (auth.uid() is not null);
+
+create policy "deal_creators insert admin" on public.deal_creators
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "deal_creators delete admin" on public.deal_creators
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create index if not exists idx_deal_creators_creator on public.deal_creators (creator_id);
+
+-- Backfill links from the old single-creator column, then drop it.
+do $$
+begin
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'deals' and column_name = 'creator_id'
+    ) then
+        insert into public.deal_creators (deal_id, creator_id)
+        select id, creator_id from public.deals where creator_id is not null
+        on conflict do nothing;
+
+        drop index if exists idx_deals_creator;
+        alter table public.deals drop column creator_id;
+    end if;
+end $$;
+
+-- ------------------------------------------------------------
 -- Row Level Security
 -- All authenticated users in the Clerk org share one agency's
 -- dataset (creators/outreach/contracts/deals/companies). RLS
@@ -391,3 +435,49 @@ create policy "custom_filters delete owner-or-admin" on public.custom_filters
     );
 
 create index if not exists idx_custom_filters_created_by on public.custom_filters (created_by);
+
+-- ------------------------------------------------------------
+-- companies — outreach tracking columns
+-- ------------------------------------------------------------
+alter table public.companies
+    add column if not exists last_contacted date,
+    add column if not exists next_meeting date;
+
+-- ------------------------------------------------------------
+-- company_contacts — contact people per company (one may be POC)
+-- ------------------------------------------------------------
+create table if not exists public.company_contacts (
+    id text primary key default gen_random_uuid()::text,
+    company_id text not null references public.companies(id) on delete cascade,
+    name text not null,
+    role text,
+    email text,
+    phone_number text,
+    is_poc boolean not null default false,
+    created_at timestamp with time zone not null default timezone('utc'::text, now())
+);
+
+alter table public.company_contacts enable row level security;
+
+create policy "company_contacts select authenticated" on public.company_contacts
+    for select using (auth.uid() is not null);
+
+create policy "company_contacts insert admin" on public.company_contacts
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "company_contacts update admin" on public.company_contacts
+    for update using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "company_contacts delete admin" on public.company_contacts
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create index if not exists idx_company_contacts_company on public.company_contacts (company_id);
