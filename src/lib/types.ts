@@ -35,8 +35,42 @@ export type Company = {
   logo?: string | null;
   industry?: string | null;
   notes?: string | null;
+  last_contacted?: string | null;
+  next_meeting?: string | null;
   owner_id?: string | null;
   created_at: string;
+};
+
+export type CompanyContact = {
+  id: string;
+  company_id: string;
+  name: string;
+  role?: string | null;
+  email?: string | null;
+  phone_number?: string | null;
+  is_poc: boolean;
+  created_at: string;
+};
+
+export type CompanyWithContacts = Company & { company_contacts: CompanyContact[] };
+
+export type CompanyContactInput = {
+  name: string;
+  role?: string | null;
+  email?: string | null;
+  phone_number?: string | null;
+  is_poc?: boolean;
+};
+
+export type CompanyInput = {
+  name: string;
+  domain?: string | null;
+  logo?: string | null;
+  industry?: string | null;
+  notes?: string | null;
+  last_contacted?: string | null;
+  next_meeting?: string | null;
+  contacts: CompanyContactInput[];
 };
 
 export type Deal = {

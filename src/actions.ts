@@ -5,7 +5,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/server";
 import { ensureUserRow } from "@/lib/user-sync";
 import { requireAdmin, requireUser } from "@/lib/rbac-server";
-import type { Creator, Company, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
+import type { Creator, Company, CompanyContactInput, CompanyInput, CompanyWithContacts, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
 import {
   matchesFilter,
   scopeConditions,
@@ -59,6 +59,8 @@ function revalidateAll() {
   revalidatePath("/outreach");
   revalidatePath("/contracts");
   revalidatePath("/deals");
+  revalidatePath("/companies");
+  revalidatePath("/creators");
 }
 
 export type OutreachWithCreator = Outreach & { creators: CreatorSummary | null };
@@ -109,28 +111,67 @@ export async function deleteCreator(id: string) {
 
 // ---------- Companies ----------
 
-export async function listCompanies(): Promise<Company[]> {
-  return rows(db.from("companies").select("*").order("created_at", { ascending: false }));
+export async function listCompanies(): Promise<CompanyWithContacts[]> {
+  return rows<CompanyWithContacts>(
+    db.from("companies").select("*, company_contacts(*)").order("created_at", { ascending: false })
+  );
 }
 
-export async function createCompany(input: Partial<Company>) {
-  await requireAdmin();
-  const { error } = await db.from("companies").insert([input]);
+function normalizeContacts(contacts: CompanyContactInput[], companyId: string) {
+  let pocAssigned = false;
+  return contacts.map((c) => {
+    const is_poc = !!c.is_poc && !pocAssigned;
+    if (is_poc) pocAssigned = true;
+    return {
+      company_id: companyId,
+      name: c.name,
+      role: c.role ?? null,
+      email: c.email ?? null,
+      phone_number: c.phone_number ?? null,
+      is_poc,
+    };
+  });
+}
+
+async function replaceContacts(companyId: string, contacts: CompanyContactInput[]) {
+  const { error } = await db.from("company_contacts").delete().eq("company_id", companyId);
   if (error) fail(error);
+  if (contacts.length === 0) return;
+  const { error: insertError } = await db
+    .from("company_contacts")
+    .insert(normalizeContacts(contacts, companyId));
+  if (insertError) fail(insertError);
+}
+
+export async function createCompany(input: CompanyInput) {
+  await requireAdmin();
+  const { contacts, ...company } = input;
+  const { data, error } = await db.from("companies").insert([company]).select("id").single();
+  if (error) fail(error);
+  const companyId = (data as { id: string }).id;
+  await replaceContacts(companyId, contacts ?? []);
   revalidateAll();
 }
 
-export async function updateCompany(id: string, input: Partial<Company>) {
+export async function updateCompany(id: string, input: CompanyInput) {
   await requireAdmin();
-  const { error } = await db.from("companies").update(input).eq("id", id);
+  const { contacts, ...company } = input;
+  const { error } = await db.from("companies").update(company).eq("id", id);
   if (error) fail(error);
+  await replaceContacts(id, contacts ?? []);
   revalidateAll();
 }
 
 export async function deleteCompany(id: string) {
   await requireAdmin();
-  const { error } = await db.from("companies").delete().eq("id", id);
+  const { count, error } = await db
+    .from("deals")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", id);
   if (error) fail(error);
+  if ((count ?? 0) > 0) throw new Error(`Cannot delete this company — ${count} deal(s) still reference it`);
+  const { error: deleteError } = await db.from("companies").delete().eq("id", id);
+  if (deleteError) fail(deleteError);
   revalidateAll();
 }
 

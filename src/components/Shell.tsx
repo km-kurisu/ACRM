@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings, Users, FileSpreadsheet } from "lucide-react";
+import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings, Users, FileSpreadsheet, Building2 } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
 import ThemeToggle from "@/components/ThemeToggle";
 import { StatusSelector } from "@/components/StatusSelector";
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/master-data", label: "Master Data", icon: Database },
   { href: "/creators", label: "Creators", icon: Users },
+  { href: "/companies", label: "Companies", icon: Building2 },
   { href: "/pages", label: "Pages", icon: FileSpreadsheet },
   { href: "/deals", label: "Deals", icon: Handshake },
   { href: "/outreach", label: "Outreach", icon: Megaphone },

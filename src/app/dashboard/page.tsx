@@ -145,11 +145,9 @@ export default async function DashboardPage({
         </Card>
       </section>
 
-      <section>
+      <section className="grid gap-6 lg:grid-cols-2">
         <TopCreatorsSection topCreators={overview.topCreators} />
-      </section>
 
-      <section>
         <Card className="glass">
           <CardHeader>
             <CardTitle>Recent Outreach</CardTitle>
