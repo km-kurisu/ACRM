@@ -59,6 +59,8 @@ function revalidateAll() {
   revalidatePath("/outreach");
   revalidatePath("/contracts");
   revalidatePath("/deals");
+  revalidatePath("/companies");
+  revalidatePath("/creators");
 }
 
 export type OutreachWithCreator = Outreach & { creators: CreatorSummary | null };
