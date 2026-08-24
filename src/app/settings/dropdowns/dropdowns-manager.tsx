@@ -34,14 +34,16 @@ function FieldCard({
   const [renameDraft, setRenameDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function run(action: () => Promise<void>, successMessage: string) {
+  async function run(action: () => Promise<void>, successMessage: string): Promise<boolean> {
     setBusy(true);
     try {
       await action();
       toast.success(successMessage);
       onChanged();
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -49,7 +51,9 @@ function FieldCard({
 
   function confirmRename(original: string) {
     void run(() => renameDropdownOption(fieldKey, original, renameDraft), "Value renamed").then(
-      () => setRenamingFrom(null)
+      (ok) => {
+        if (ok) setRenamingFrom(null);
+      }
     );
   }
 
@@ -71,7 +75,7 @@ function FieldCard({
                 value={renameDraft}
                 onChange={(e) => setRenameDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !busy) {
                     e.preventDefault();
                     confirmRename(value);
                   }
@@ -92,6 +96,7 @@ function FieldCard({
                 type="button"
                 variant="ghost"
                 size="icon"
+                disabled={busy}
                 aria-label="Cancel rename"
                 onClick={() => setRenamingFrom(null)}
               >
