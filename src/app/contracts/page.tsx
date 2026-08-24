@@ -83,7 +83,7 @@ export default function ContractsPage() {
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ContractWithCreator | null>(null);
-  const [form, setForm] = useState<ContractForm>(EMPTY);
+  const [form, setForm] = useState<ContractForm>(() => freshForm());
   const [saving, setSaving] = useState(false);
 
   const load = React.useCallback(async () => {

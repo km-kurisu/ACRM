@@ -83,7 +83,7 @@ export default function OutreachPage() {
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<OutreachWithCreator | null>(null);
-  const [form, setForm] = useState<OutreachForm>(EMPTY);
+  const [form, setForm] = useState<OutreachForm>(() => freshForm());
   const [saving, setSaving] = useState(false);
 
   const load = React.useCallback(async () => {

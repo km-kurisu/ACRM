@@ -91,7 +91,7 @@ export default function DealsPage() {
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DealWithRefs | null>(null);
-  const [form, setForm] = useState<DealForm>(EMPTY);
+  const [form, setForm] = useState<DealForm>(() => freshForm());
   const [saving, setSaving] = useState(false);
 
   const load = React.useCallback(async () => {
