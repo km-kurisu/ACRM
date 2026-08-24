@@ -7,6 +7,11 @@ import { ensureUserRow } from "@/lib/user-sync";
 import { requireAdmin, requireUser } from "@/lib/rbac-server";
 import type { Creator, Company, CompanyContactInput, CompanyInput, CompanyWithContacts, Deal, Outreach, Contract, CreatorSummary, CompanySummary } from "@/lib/types";
 import {
+  DROPDOWN_FIELD_KEYS,
+  DROPDOWN_FIELDS,
+  type DropdownFieldKey,
+} from "@/lib/dropdown-options";
+import {
   matchesFilter,
   scopeConditions,
   validateConditions,
@@ -473,6 +478,116 @@ export async function getDashboardOverview(filter?: FilterCondition[]): Promise<
     topCreators,
     recentOutreach,
   };
+}
+
+// ---------- Dropdown options ----------
+
+function assertDropdownField(fieldKey: string): asserts fieldKey is DropdownFieldKey {
+  if (!(fieldKey in DROPDOWN_FIELDS)) throw new Error("Unknown dropdown field");
+}
+
+function normalizeOptionValue(rawValue: string): string {
+  const value = rawValue.trim();
+  if (!value) throw new Error("Value cannot be empty");
+  if (value.length > 120) throw new Error("Value must be 120 characters or fewer");
+  return value;
+}
+
+// Case-insensitive uniqueness within one field. `allowExact` exempts the
+// option being renamed from clashing with itself (case-only renames).
+async function assertNoDuplicate(
+  fieldKey: DropdownFieldKey,
+  value: string,
+  allowExact?: string
+) {
+  const existing = await rows<{ value: string }>(
+    db.from("dropdown_options").select("value").eq("field_key", fieldKey)
+  );
+  const clash = existing.some(
+    (r) => r.value !== allowExact && r.value.toLowerCase() === value.toLowerCase()
+  );
+  if (clash) throw new Error(`"${value}" already exists`);
+}
+
+export async function listDropdownOptions(): Promise<Record<DropdownFieldKey, string[]>> {
+  await requireUser();
+  const data = await rows<{ field_key: string; value: string }>(
+    db.from("dropdown_options").select("field_key, value").order("sort_order").order("value")
+  );
+  const result = Object.fromEntries(
+    DROPDOWN_FIELD_KEYS.map((k): [DropdownFieldKey, string[]] => [k, []])
+  ) as Record<DropdownFieldKey, string[]>;
+  for (const row of data) {
+    const key = row.field_key as DropdownFieldKey;
+    if (!(key in result)) continue;
+    result[key].push(row.value);
+  }
+  return result;
+}
+
+export async function createDropdownOption(fieldKey: string, rawValue: string) {
+  await requireAdmin();
+  assertDropdownField(fieldKey);
+  const value = normalizeOptionValue(rawValue);
+  await assertNoDuplicate(fieldKey, value);
+
+  const latest = await rows<{ sort_order: number }>(
+    db.from("dropdown_options").select("sort_order").eq("field_key", fieldKey).order("sort_order", { ascending: false }).limit(1)
+  );
+  const nextOrder = (latest[0]?.sort_order ?? -1) + 1;
+
+  const { error } = await db.from("dropdown_options").insert({ field_key: fieldKey, value, sort_order: nextOrder });
+  if (error) fail(error);
+  revalidateAll();
+  revalidatePath("/settings/dropdowns");
+}
+
+export async function renameDropdownOption(fieldKey: string, oldValue: string, newValue: string) {
+  await requireAdmin();
+  assertDropdownField(fieldKey);
+  const value = normalizeOptionValue(newValue);
+  await assertNoDuplicate(fieldKey, value, oldValue);
+
+  // Cascade first so a failed update leaves option list and data consistent.
+  // (Supabase update takes one values object; the column is dynamic.)
+  const { table, column } = DROPDOWN_FIELDS[fieldKey];
+  if (value !== oldValue) {
+    const { error: cascadeError } = await db
+      .from(table)
+      .update({ [column]: value })
+      .eq(column, oldValue);
+    if (cascadeError) fail(cascadeError);
+  }
+  const { error } = await db
+    .from("dropdown_options")
+    .update({ value })
+    .eq("field_key", fieldKey)
+    .eq("value", oldValue);
+  if (error) fail(error);
+  revalidateAll();
+  revalidatePath("/settings/dropdowns");
+}
+
+export async function deleteDropdownOption(fieldKey: string, value: string) {
+  await requireAdmin();
+  assertDropdownField(fieldKey);
+
+  const { table, column } = DROPDOWN_FIELDS[fieldKey];
+  const { count, error } = await db
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .eq(column, value);
+  if (error) fail(error);
+  if ((count ?? 0) > 0) throw new Error(`Cannot remove "${value}" — ${count} record(s) still use it`);
+
+  const { error: deleteError } = await db
+    .from("dropdown_options")
+    .delete()
+    .eq("field_key", fieldKey)
+    .eq("value", value);
+  if (deleteError) fail(deleteError);
+  revalidateAll();
+  revalidatePath("/settings/dropdowns");
 }
 
 // ---------- Presence ----------
