@@ -29,6 +29,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EnumSelect } from "@/components/enum-select";
+import { pickOption, useDropdownOptions } from "@/lib/use-dropdown-options";
 
 type OutreachForm = {
   creator_id: string;
@@ -63,6 +65,17 @@ const STATUS_COLORS: Record<string, string> = {
 export default function OutreachPage() {
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
+  const dd = useDropdownOptions();
+
+  function freshForm(): OutreachForm {
+    return {
+      ...EMPTY,
+      contact_method: pickOption(dd.options.contact_method, EMPTY.contact_method),
+      current_status: pickOption(dd.options.current_status, EMPTY.current_status),
+      outcome: pickOption(dd.options.outcome, EMPTY.outcome),
+    };
+  }
+
   const [items, setItems] = useState<OutreachWithCreator[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -116,7 +129,7 @@ export default function OutreachPage() {
 
   function resetForm() {
     setEditing(null);
-    setForm(EMPTY);
+    setForm(freshForm());
   }
 
   function set(v: Partial<OutreachForm>) {
@@ -218,35 +231,21 @@ export default function OutreachPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="o-method">Contact method</Label>
-                  <select
+                  <EnumSelect
                     id="o-method"
                     value={form.contact_method}
-                    onChange={(e) => set({ contact_method: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="Email">Email</option>
-                    <option value="Instagram">Instagram</option>
-                    <option value="X (Twitter)">X (Twitter)</option>
-                    <option value="WhatsApp">WhatsApp</option>
-                    <option value="Other">Other</option>
-                  </select>
+                    onChange={(v) => set({ contact_method: v })}
+                    options={dd.options.contact_method}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="o-status">Current status</Label>
-                  <select
+                  <EnumSelect
                     id="o-status"
                     value={form.current_status}
-                    onChange={(e) => set({ current_status: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="No Response">No Response</option>
-                    <option value="Awaiting Reply">Awaiting Reply</option>
-                    <option value="Interested">Interested</option>
-                    <option value="Not Interested">Not Interested</option>
-                    <option value="Negotiating">Negotiating</option>
-                    <option value="Signed">Signed</option>
-                    <option value="On Hold">On Hold</option>
-                  </select>
+                    onChange={(v) => set({ current_status: v })}
+                    options={dd.options.current_status}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -261,17 +260,12 @@ export default function OutreachPage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="o-outcome">Outcome</Label>
-                <select
+                <EnumSelect
                   id="o-outcome"
                   value={form.outcome}
-                  onChange={(e) => set({ outcome: e.target.value })}
-                  className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Signed">Signed</option>
-                  <option value="Rejected">Rejected</option>
-                  <option value="No Response">No Response</option>
-                </select>
+                  onChange={(v) => set({ outcome: v })}
+                  options={dd.options.outcome}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="o-notes">Notes</Label>
