@@ -6,6 +6,7 @@ import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Contract, Creator } from "@/lib/types";
 import { createContract, deleteContract, listContracts, listCreators, updateContract, type ContractWithCreator } from "@/actions";
+import { CONTRACT_STATUS_COLORS } from "@/lib/colors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,14 +55,6 @@ const EMPTY: ContractForm = {
   notes: "",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  Draft: "bg-muted text-muted-foreground",
-  Active: "bg-foreground/10 text-foreground",
-  Renewed: "bg-foreground/10 text-foreground",
-  Expired: "bg-muted text-muted-foreground",
-  Terminated: "bg-border/60 text-muted-foreground line-through",
-};
-
 export default function ContractsPage() {
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
@@ -100,24 +93,10 @@ export default function ContractsPage() {
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
     void (async () => {
-      try {
-        const [contractData, creatorData] = await Promise.all([listContracts(), listCreators()]);
-        if (cancelled) return;
-        setContracts(contractData);
-        setCreators(creatorData);
-        setLoaded(true);
-      } catch {
-        if (!cancelled) toast.error("Could not load contracts");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await load();
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [load]);
 
   const filtered = query.trim()
     ? contracts.filter((c) =>
@@ -321,7 +300,7 @@ export default function ContractsPage() {
                     <TableCell className="pl-6 font-medium">{contract.creators?.creator_name ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{contract.contract_type || "—"}</TableCell>
                     <TableCell>
-                      <Badge className={STATUS_COLORS[contract.contract_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+                      <Badge className={CONTRACT_STATUS_COLORS[contract.contract_status ?? ""] ?? "bg-muted text-muted-foreground"}>
                         {contract.contract_status || "—"}
                       </Badge>
                     </TableCell>

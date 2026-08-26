@@ -6,6 +6,7 @@ import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Outreach, Creator } from "@/lib/types";
 import { createOutreach, deleteOutreach, listOutreach, listCreators, updateOutreach, type OutreachWithCreator } from "@/actions";
+import { OUTREACH_STATUS_COLORS } from "@/lib/colors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,16 +53,6 @@ const EMPTY: OutreachForm = {
   notes: "",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  Negotiating: "bg-foreground/10 text-foreground",
-  Interested: "bg-foreground/10 text-foreground",
-  Signed: "bg-foreground/10 text-foreground",
-  "Awaiting Reply": "bg-foreground/15 text-foreground",
-  "On Hold": "bg-foreground/15 text-foreground",
-  "Not Interested": "bg-muted text-muted-foreground line-through",
-  "No Response": "bg-muted text-muted-foreground",
-};
-
 export default function OutreachPage() {
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
@@ -100,24 +91,10 @@ export default function OutreachPage() {
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
     void (async () => {
-      try {
-        const [outreachData, creatorData] = await Promise.all([listOutreach(), listCreators()]);
-        if (cancelled) return;
-        setItems(outreachData);
-        setCreators(creatorData);
-        setLoaded(true);
-      } catch {
-        if (!cancelled) toast.error("Could not load outreach");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await load();
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [load]);
 
   const filtered = query.trim()
     ? items.filter((o) =>
@@ -318,7 +295,7 @@ export default function OutreachPage() {
                       <Badge variant="outline">{item.contact_method || "—"}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={STATUS_COLORS[item.current_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+                      <Badge className={OUTREACH_STATUS_COLORS[item.current_status ?? ""] ?? "bg-muted text-muted-foreground"}>
                         {item.current_status || "—"}
                       </Badge>
                     </TableCell>

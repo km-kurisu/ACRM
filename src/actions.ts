@@ -346,6 +346,75 @@ export async function listMasterData(): Promise<MasterDataRow[]> {
   });
 }
 
+// ---------- Pages ----------
+
+export type CreatorPageRow = {
+  creator_id: string;
+  creator_name: string;
+  platform: string;
+  handle: string;
+  url: string | null;
+  followers: number | null;
+  total_followers: number;
+  brand_deal_value: number;
+  engagement_rate: number | null;
+};
+
+function platformUrl(platform: string, handle: string): string | null {
+  const trimmed = handle.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  switch (platform) {
+    case "Instagram":
+      return `https://instagram.com/${trimmed}`;
+    case "YouTube":
+      return `https://youtube.com/@${trimmed}`;
+    case "X (Twitter)":
+      return `https://x.com/${trimmed}`;
+    default:
+      return null;
+  }
+}
+
+export async function listPages(): Promise<CreatorPageRow[]> {
+  const creators = await rows<Creator>(db.from("creators").select("*").order("creator_name"));
+  const deals = await rows<Pick<Deal, "id" | "deal_value">>(db.from("deals").select("id, deal_value"));
+  const dealCreators = await rows<{ deal_id: string; creator_id: string }>(
+    db.from("deal_creators").select("deal_id, creator_id")
+  );
+
+  const dealValueById = new Map(deals.map((d) => [d.id, Number(d.deal_value || 0)]));
+  const valueByCreator = new Map<string, number>();
+  for (const dc of dealCreators) {
+    valueByCreator.set(dc.creator_id, (valueByCreator.get(dc.creator_id) ?? 0) + (dealValueById.get(dc.deal_id) ?? 0));
+  }
+
+  const out: CreatorPageRow[] = [];
+  for (const c of creators) {
+    const entries: [string, string | null | undefined, number | null][] = [
+      ["Instagram", c.instagram, c.followers_instagram ?? null],
+      ["YouTube", c.youtube, c.followers_youtube ?? null],
+      ["X (Twitter)", c.x_twitter, null],
+      ["Other", c.other_platforms, null],
+    ];
+    for (const [platform, handle, followers] of entries) {
+      if (!handle?.trim()) continue;
+      out.push({
+        creator_id: c.id,
+        creator_name: c.creator_name,
+        platform,
+        handle,
+        url: platformUrl(platform, handle),
+        followers,
+        total_followers: (c.followers_instagram ?? 0) + (c.followers_youtube ?? 0),
+        brand_deal_value: valueByCreator.get(c.id) ?? 0,
+        engagement_rate: c.engagement_rate ?? null,
+      });
+    }
+  }
+  return out;
+}
+
 // ---------- Dashboard ----------
 
 export type CountItem = { label: string; value: number };

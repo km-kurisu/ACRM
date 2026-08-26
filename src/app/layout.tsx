@@ -1,7 +1,7 @@
 import React from "react";
 import type { Metadata } from "next";
 import "./globals.css";
-import ClientWrapper from "@/components/ClientWrapper";
+import { ClerkProvider } from "@clerk/nextjs";
 import Shell from "@/components/Shell";
 import { InlineScript } from "@/components/InlineScript";
 import { Geist } from "next/font/google";
@@ -23,9 +23,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
-        <ClientWrapper>
+        <ClerkProvider>
           <Shell>{children}</Shell>
-        </ClientWrapper>
+        </ClerkProvider>
       </body>
     </html>
   );
