@@ -481,3 +481,122 @@ create policy "company_contacts delete admin" on public.company_contacts
     );
 
 create index if not exists idx_company_contacts_company on public.company_contacts (company_id);
+
+-- ------------------------------------------------------------
+-- dropdown_options — admin-editable option lists for enum fields
+-- Backed by src/lib/dropdown-options.ts (DEFAULT_OPTIONS mirrors seed)
+-- ------------------------------------------------------------
+create table if not exists public.dropdown_options (
+    id uuid primary key default gen_random_uuid(),
+    field_key text not null,
+    value text not null,
+    sort_order integer not null default 0,
+    created_at timestamp with time zone not null default timezone('utc'::text, now())
+);
+
+create unique index if not exists idx_dropdown_options_field_value
+    on public.dropdown_options (field_key, lower(value));
+
+create index if not exists idx_dropdown_options_field
+    on public.dropdown_options (field_key, sort_order);
+
+alter table public.dropdown_options enable row level security;
+
+create policy "dropdown_options select authenticated" on public.dropdown_options
+    for select using (auth.uid() is not null);
+
+create policy "dropdown_options insert admin" on public.dropdown_options
+    for insert with check (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "dropdown_options update admin" on public.dropdown_options
+    for update using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create policy "dropdown_options delete admin" on public.dropdown_options
+    for delete using (
+        auth.uid() is not null and
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+-- Seed current hardcoded values (order matches today's forms).
+insert into public.dropdown_options (field_key, value, sort_order) values
+    ('creator_type', 'Individual', 0),
+    ('creator_type', 'Agency', 1),
+    ('creator_type', 'MCN', 2),
+    ('creator_type', 'Brand', 3),
+    ('creator_type', 'Studio', 4),
+    ('niche', 'Cosplay', 0),
+    ('niche', 'Fan Art / Illustration', 1),
+    ('niche', 'AMV Editing', 2),
+    ('niche', 'Anime Commentary / Review', 3),
+    ('niche', 'Voice Acting / Dubbing', 4),
+    ('niche', 'Anime News', 5),
+    ('niche', 'Figure Collecting', 6),
+    ('niche', 'Manga Content', 7),
+    ('niche', 'Gaming + Anime', 8),
+    ('niche', 'Anime Merch Reviews', 9),
+    ('priority', 'High', 0),
+    ('priority', 'Medium', 1),
+    ('priority', 'Low', 2),
+    ('interested_in_exclusive_mgmt', 'Yes', 0),
+    ('interested_in_exclusive_mgmt', 'No', 1),
+    ('interested_in_exclusive_mgmt', 'Maybe', 2),
+    ('contact_method', 'Email', 0),
+    ('contact_method', 'Instagram', 1),
+    ('contact_method', 'X (Twitter)', 2),
+    ('contact_method', 'WhatsApp', 3),
+    ('contact_method', 'Other', 4),
+    ('current_status', 'No Response', 0),
+    ('current_status', 'Awaiting Reply', 1),
+    ('current_status', 'Interested', 2),
+    ('current_status', 'Not Interested', 3),
+    ('current_status', 'Negotiating', 4),
+    ('current_status', 'Signed', 5),
+    ('current_status', 'On Hold', 6),
+    ('outcome', 'Pending', 0),
+    ('outcome', 'Signed', 1),
+    ('outcome', 'Rejected', 2),
+    ('outcome', 'No Response', 3),
+    ('contract_type', 'Exclusive Management', 0),
+    ('contract_type', 'Non-Exclusive Management', 1),
+    ('contract_type', 'Brand Deal Only', 2),
+    ('contract_type', 'Project-Based', 3),
+    ('contract_type', 'Ambassadorship', 4),
+    ('contract_status', 'Draft', 0),
+    ('contract_status', 'Active', 1),
+    ('contract_status', 'Renewed', 2),
+    ('contract_status', 'Expired', 3),
+    ('contract_status', 'Terminated', 4),
+    ('exclusivity', 'Yes', 0),
+    ('exclusivity', 'No', 1),
+    ('campaign_status', 'Pitched', 0),
+    ('campaign_status', 'Confirmed', 1),
+    ('campaign_status', 'In Progress', 2),
+    ('campaign_status', 'Completed', 3),
+    ('campaign_status', 'Cancelled', 4),
+    ('invoice_status', 'Not Sent', 0),
+    ('invoice_status', 'Sent', 1),
+    ('invoice_status', 'Overdue', 2),
+    ('payment_status', 'Pending', 0),
+    ('payment_status', 'Partial', 1),
+    ('payment_status', 'Paid', 2)
+on conflict do nothing;
+
+-- Values are now data, not constraints. creator_type never had one.
+alter table public.creators  drop constraint if exists creators_niche_check;
+alter table public.creators  drop constraint if exists creators_interested_in_exclusive_mgmt_check;
+alter table public.creators  drop constraint if exists creators_priority_check;
+alter table public.outreach  drop constraint if exists outreach_contact_method_check;
+alter table public.outreach  drop constraint if exists outreach_current_status_check;
+alter table public.outreach  drop constraint if exists outreach_outcome_check;
+alter table public.contracts drop constraint if exists contracts_contract_type_check;
+alter table public.contracts drop constraint if exists contracts_exclusivity_check;
+alter table public.contracts drop constraint if exists contracts_contract_status_check;
+alter table public.deals     drop constraint if exists deals_campaign_status_check;
+alter table public.deals     drop constraint if exists deals_invoice_status_check;
+alter table public.deals     drop constraint if exists deals_payment_status_check;

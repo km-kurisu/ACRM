@@ -7,6 +7,8 @@ import { Search, Plus, MoreVertical, Pencil, Trash2, Users, Building2 } from "lu
 import { Deal, Creator, Company } from "@/lib/types";
 import { createDeal, deleteDeal, listDeals, listCreators, listCompanies, updateDeal, type DealWithRefs } from "@/actions";
 import { DEAL_STATUS_COLORS } from "@/lib/colors";
+import { EnumSelect } from "@/components/enum-select";
+import { pickOption, useDropdownOptions } from "@/lib/use-dropdown-options";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +72,17 @@ const PAYMENT_COLORS: Record<string, string> = {
 export default function DealsPage() {
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
+  const dd = useDropdownOptions();
+
+  function freshForm(): DealForm {
+    return {
+      ...EMPTY,
+      campaign_status: pickOption(dd.options.campaign_status, EMPTY.campaign_status),
+      invoice_status: pickOption(dd.options.invoice_status, EMPTY.invoice_status),
+      payment_status: pickOption(dd.options.payment_status, EMPTY.payment_status),
+    };
+  }
+
   const [deals, setDeals] = useState<DealWithRefs[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -78,7 +91,7 @@ export default function DealsPage() {
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DealWithRefs | null>(null);
-  const [form, setForm] = useState<DealForm>(EMPTY);
+  const [form, setForm] = useState<DealForm>(() => freshForm());
   const [saving, setSaving] = useState(false);
 
   const load = React.useCallback(async () => {
@@ -115,7 +128,7 @@ export default function DealsPage() {
 
   function resetForm() {
     setEditing(null);
-    setForm(EMPTY);
+    setForm(freshForm());
   }
 
   function set(v: Partial<DealForm>) {
@@ -293,44 +306,30 @@ export default function DealsPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">
                   <Label htmlFor="d-campaign-status">Campaign status</Label>
-                  <select
+                  <EnumSelect
                     id="d-campaign-status"
                     value={form.campaign_status}
-                    onChange={(e) => set({ campaign_status: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="Pitched">Pitched</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
+                    onChange={(v) => set({ campaign_status: v })}
+                    options={dd.options.campaign_status}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="d-invoice">Invoice status</Label>
-                  <select
+                  <EnumSelect
                     id="d-invoice"
                     value={form.invoice_status}
-                    onChange={(e) => set({ invoice_status: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="Not Sent">Not Sent</option>
-                    <option value="Sent">Sent</option>
-                    <option value="Overdue">Overdue</option>
-                  </select>
+                    onChange={(v) => set({ invoice_status: v })}
+                    options={dd.options.invoice_status}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="d-payment">Payment status</Label>
-                  <select
+                  <EnumSelect
                     id="d-payment"
                     value={form.payment_status}
-                    onChange={(e) => set({ payment_status: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Paid">Paid</option>
-                  </select>
+                    onChange={(v) => set({ payment_status: v })}
+                    options={dd.options.payment_status}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

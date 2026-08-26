@@ -5,6 +5,8 @@ import { Creator } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EnumSelect } from "@/components/enum-select";
+import { useDropdownOptions } from "@/lib/use-dropdown-options";
 
 export type CreatorFormValues = {
   creator_name: string;
@@ -152,9 +154,6 @@ const LANGUAGE_OPTIONS = [
   "Tagalog", "Bengali", "Tamil", "Telugu", "Marathi", "Gujarati", "Punjabi", "Urdu",
 ];
 
-const SELECT_CLASS =
-  "h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid gap-2">
@@ -170,6 +169,7 @@ export function CreatorFormFields({
   values: CreatorFormValues;
   onChange: (v: Partial<CreatorFormValues>) => void;
 }) {
+  const dd = useDropdownOptions();
   const set = onChange;
   return (
     <>
@@ -181,19 +181,13 @@ export function CreatorFormFields({
         </div>
         <div className="grid gap-2">
           <Label htmlFor="c-type">Creator Type</Label>
-          <select
+          <EnumSelect
             id="c-type"
             value={values.creator_type}
-            onChange={(e) => set({ creator_type: e.target.value })}
-            className={SELECT_CLASS}
-          >
-            <option value="">—</option>
-            <option value="Individual">Individual</option>
-            <option value="Agency">Agency</option>
-            <option value="MCN">MCN</option>
-            <option value="Brand">Brand</option>
-            <option value="Studio">Studio</option>
-          </select>
+            onChange={(v) => set({ creator_type: v })}
+            options={dd.options.creator_type}
+            allowBlank
+          />
         </div>
       </div>
 
@@ -253,24 +247,13 @@ export function CreatorFormFields({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="grid gap-2">
           <Label htmlFor="c-niche">Niche</Label>
-          <select
+          <EnumSelect
             id="c-niche"
             value={values.niche}
-            onChange={(e) => set({ niche: e.target.value })}
-            className={SELECT_CLASS}
-          >
-            <option value="">—</option>
-            <option value="Cosplay">Cosplay</option>
-            <option value="Fan Art / Illustration">Fan Art / Illustration</option>
-            <option value="AMV Editing">AMV Editing</option>
-            <option value="Anime Commentary / Review">Anime Commentary / Review</option>
-            <option value="Voice Acting / Dubbing">Voice Acting / Dubbing</option>
-            <option value="Anime News">Anime News</option>
-            <option value="Figure Collecting">Figure Collecting</option>
-            <option value="Manga Content">Manga Content</option>
-            <option value="Gaming + Anime">Gaming + Anime</option>
-            <option value="Anime Merch Reviews">Anime Merch Reviews</option>
-          </select>
+            onChange={(v) => set({ niche: v })}
+            options={dd.options.niche}
+            allowBlank
+          />
         </div>
         <div className="grid gap-2 sm:col-span-2">
           <Label htmlFor="c-content">Primary Content Type</Label>
@@ -320,29 +303,21 @@ export function CreatorFormFields({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="grid gap-2">
           <Label htmlFor="c-priority">Priority</Label>
-          <select
+          <EnumSelect
             id="c-priority"
             value={values.priority}
-            onChange={(e) => set({ priority: e.target.value })}
-            className={SELECT_CLASS}
-          >
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
-          </select>
+            onChange={(v) => set({ priority: v })}
+            options={dd.options.priority}
+          />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="c-exclusive">Exclusive Mgmt Interest</Label>
-          <select
+          <EnumSelect
             id="c-exclusive"
             value={values.interested_in_exclusive_mgmt}
-            onChange={(e) => set({ interested_in_exclusive_mgmt: e.target.value })}
-            className={SELECT_CLASS}
-          >
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
-            <option value="Maybe">Maybe</option>
-          </select>
+            onChange={(v) => set({ interested_in_exclusive_mgmt: v })}
+            options={dd.options.interested_in_exclusive_mgmt}
+          />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="c-manager">Assigned Manager</Label>

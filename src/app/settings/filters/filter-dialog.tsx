@@ -24,6 +24,7 @@ import {
   type FilterCondition,
   type FilterVisibility,
 } from "@/lib/custom-filters";
+import { useDropdownOptions } from "@/lib/use-dropdown-options";
 
 const SELECT_CLASS =
   "h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -56,6 +57,7 @@ export function FilterDialog({
     return restored.length > 0 ? restored : [emptyDraft()];
   });
   const [saving, setSaving] = useState(false);
+  const dd = useDropdownOptions();
 
   const validationError = validateConditions(conditions);
   const groups = [...new Set(FILTERABLE_FIELDS.map((f) => f.group))];
@@ -178,29 +180,34 @@ export function FilterDialog({
                     ))}
                   </select>
                   {needsValue &&
-                    (def?.options ? (
-                      <select
-                        aria-label="Value"
-                        className={`${SELECT_CLASS} w-40`}
-                        value={c.value ?? ""}
-                        onChange={(e) => patch(i, { value: e.target.value })}
-                      >
-                        <option value="">Select…</option>
-                        {def.options.map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        aria-label="Value"
-                        className="w-40"
-                        type={def?.type === "number" ? "number" : def?.type === "date" ? "date" : "text"}
-                        value={c.value ?? ""}
-                        onChange={(e) => patch(i, { value: e.target.value })}
-                      />
-                    ))}
+                    (() => {
+                      const dynamic =
+                        def && def.field in dd.options ? dd.options[def.field as keyof typeof dd.options] : undefined;
+                      const opts = dynamic ?? def?.options;
+                      return opts ? (
+                        <select
+                          aria-label="Value"
+                          className={`${SELECT_CLASS} w-40`}
+                          value={c.value ?? ""}
+                          onChange={(e) => patch(i, { value: e.target.value })}
+                        >
+                          <option value="">Select…</option>
+                          {opts.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          aria-label="Value"
+                          className="w-40"
+                          type={def?.type === "number" ? "number" : def?.type === "date" ? "date" : "text"}
+                          value={c.value ?? ""}
+                          onChange={(e) => patch(i, { value: e.target.value })}
+                        />
+                      );
+                    })()}
                   <Button
                     type="button"
                     variant="ghost"

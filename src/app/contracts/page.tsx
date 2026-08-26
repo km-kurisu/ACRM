@@ -29,6 +29,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EnumSelect } from "@/components/enum-select";
+import { pickOption, useDropdownOptions } from "@/lib/use-dropdown-options";
 
 type ContractForm = {
   creator_id: string;
@@ -63,6 +65,17 @@ const STATUS_COLORS: Record<string, string> = {
 export default function ContractsPage() {
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
+  const dd = useDropdownOptions();
+
+  function freshForm(): ContractForm {
+    return {
+      ...EMPTY,
+      contract_type: pickOption(dd.options.contract_type, EMPTY.contract_type),
+      contract_status: pickOption(dd.options.contract_status, EMPTY.contract_status),
+      exclusivity: pickOption(dd.options.exclusivity, EMPTY.exclusivity),
+    };
+  }
+
   const [contracts, setContracts] = useState<ContractWithCreator[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -70,7 +83,7 @@ export default function ContractsPage() {
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ContractWithCreator | null>(null);
-  const [form, setForm] = useState<ContractForm>(EMPTY);
+  const [form, setForm] = useState<ContractForm>(() => freshForm());
   const [saving, setSaving] = useState(false);
 
   const load = React.useCallback(async () => {
@@ -116,7 +129,7 @@ export default function ContractsPage() {
 
   function resetForm() {
     setEditing(null);
-    setForm(EMPTY);
+    setForm(freshForm());
   }
 
   function set(v: Partial<ContractForm>) {
@@ -219,45 +232,30 @@ export default function ContractsPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">
                   <Label htmlFor="ct-type">Contract type</Label>
-                  <select
+                  <EnumSelect
                     id="ct-type"
                     value={form.contract_type}
-                    onChange={(e) => set({ contract_type: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="Exclusive Management">Exclusive Management</option>
-                    <option value="Non-Exclusive Management">Non-Exclusive Management</option>
-                    <option value="Brand Deal Only">Brand Deal Only</option>
-                    <option value="Project-Based">Project-Based</option>
-                    <option value="Ambassadorship">Ambassadorship</option>
-                  </select>
+                    onChange={(v) => set({ contract_type: v })}
+                    options={dd.options.contract_type}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="ct-status">Contract status</Label>
-                  <select
+                  <EnumSelect
                     id="ct-status"
                     value={form.contract_status}
-                    onChange={(e) => set({ contract_status: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="Draft">Draft</option>
-                    <option value="Active">Active</option>
-                    <option value="Renewed">Renewed</option>
-                    <option value="Expired">Expired</option>
-                    <option value="Terminated">Terminated</option>
-                  </select>
+                    onChange={(v) => set({ contract_status: v })}
+                    options={dd.options.contract_status}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="ct-exclusivity">Exclusivity</Label>
-                  <select
+                  <EnumSelect
                     id="ct-exclusivity"
                     value={form.exclusivity}
-                    onChange={(e) => set({ exclusivity: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="No">No</option>
-                    <option value="Yes">Yes</option>
-                  </select>
+                    onChange={(v) => set({ exclusivity: v })}
+                    options={dd.options.exclusivity}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -56,6 +56,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { EnumSelect } from "@/components/enum-select";
+import { pickOption, useDropdownOptions } from "@/lib/use-dropdown-options";
 import type { Creator, Outreach, Contract, Deal, Company } from "@/lib/types";
 import {
   CONTRACT_STATUS_COLORS,
@@ -76,6 +78,46 @@ export default function CreatorDetailPage() {
   const id = params.id as string;
   const { user } = useUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
+
+  const dd = useDropdownOptions();
+
+  function freshOutreachForm() {
+    return {
+      contact_method: pickOption(dd.options.contact_method, "Email"),
+      date_contacted: "",
+      next_follow_up_date: "",
+      current_status: pickOption(dd.options.current_status, "No Response"),
+      outcome: pickOption(dd.options.outcome, "Pending"),
+      notes: "",
+    };
+  }
+
+  function freshContractForm() {
+    return {
+      contract_type: pickOption(dd.options.contract_type, "Exclusive Management"),
+      contract_status: pickOption(dd.options.contract_status, "Draft"),
+      start_date: "",
+      end_date: "",
+      exclusivity: pickOption(dd.options.exclusivity, "No"),
+      renewal_reminder: "",
+      notes: "",
+    };
+  }
+
+  function freshDealForm() {
+    return {
+      company_id: "",
+      campaign: "",
+      deal_value: "",
+      agency_commission: "",
+      campaign_status: pickOption(dd.options.campaign_status, "Pitched"),
+      invoice_status: pickOption(dd.options.invoice_status, "Not Sent"),
+      payment_status: pickOption(dd.options.payment_status, "Pending"),
+      due_date: "",
+      completion_date: "",
+      notes: "",
+    };
+  }
 
   const [creator, setCreator] = useState<Creator | null>(null);
   const [masterRow, setMasterRow] = useState<MasterDataRow | null>(null);
@@ -205,7 +247,7 @@ export default function CreatorDetailPage() {
       }
       setOutreachDialogOpen(false);
       setOutreachEditing(null);
-      setOutreachForm({ contact_method: "Email", date_contacted: "", next_follow_up_date: "", current_status: "No Response", outcome: "Pending", notes: "" });
+      setOutreachForm(freshOutreachForm());
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -248,7 +290,7 @@ export default function CreatorDetailPage() {
       }
       setContractDialogOpen(false);
       setContractEditing(null);
-      setContractForm({ contract_type: "Exclusive Management", contract_status: "Draft", start_date: "", end_date: "", exclusivity: "No", renewal_reminder: "", notes: "" });
+      setContractForm(freshContractForm());
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -293,7 +335,7 @@ export default function CreatorDetailPage() {
       }
       setDealDialogOpen(false);
       setDealEditing(null);
-      setDealForm({ company_id: "", campaign: "", deal_value: "", agency_commission: "", campaign_status: "Pitched", invoice_status: "Not Sent", payment_status: "Pending", due_date: "", completion_date: "", notes: "" });
+      setDealForm(freshDealForm());
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -461,7 +503,7 @@ export default function CreatorDetailPage() {
             <Badge variant="outline">{outreach.length}</Badge>
           </div>
           {isAdmin && (
-            <Dialog open={outreachDialogOpen} onOpenChange={(open) => { setOutreachDialogOpen(open); if (!open) { setOutreachEditing(null); setOutreachForm({ contact_method: "Email", date_contacted: "", next_follow_up_date: "", current_status: "No Response", outcome: "Pending", notes: "" }); } }}>
+            <Dialog open={outreachDialogOpen} onOpenChange={(open) => { setOutreachDialogOpen(open); if (!open) { setOutreachEditing(null); setOutreachForm(freshOutreachForm()); } }}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="secondary" className="glass"><Plus className="size-3" /> Add</Button>
               </DialogTrigger>
@@ -473,25 +515,21 @@ export default function CreatorDetailPage() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="grid gap-2">
                       <Label>Contact Method</Label>
-                      <select value={outreachForm.contact_method} onChange={(e) => setOutreachForm((p) => ({ ...p, contact_method: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="Email">Email</option>
-                        <option value="Instagram">Instagram</option>
-                        <option value="X (Twitter)">X (Twitter)</option>
-                        <option value="WhatsApp">WhatsApp</option>
-                        <option value="Other">Other</option>
-                      </select>
+                      <EnumSelect
+                        id="o-method"
+                        value={outreachForm.contact_method}
+                        onChange={(v) => setOutreachForm((p) => ({ ...p, contact_method: v }))}
+                        options={dd.options.contact_method}
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label>Status</Label>
-                      <select value={outreachForm.current_status} onChange={(e) => setOutreachForm((p) => ({ ...p, current_status: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="No Response">No Response</option>
-                        <option value="Awaiting Reply">Awaiting Reply</option>
-                        <option value="Interested">Interested</option>
-                        <option value="Not Interested">Not Interested</option>
-                        <option value="Negotiating">Negotiating</option>
-                        <option value="Signed">Signed</option>
-                        <option value="On Hold">On Hold</option>
-                      </select>
+                      <EnumSelect
+                        id="o-status"
+                        value={outreachForm.current_status}
+                        onChange={(v) => setOutreachForm((p) => ({ ...p, current_status: v }))}
+                        options={dd.options.current_status}
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -500,12 +538,12 @@ export default function CreatorDetailPage() {
                   </div>
                   <div className="grid gap-2">
                     <Label>Outcome</Label>
-                    <select value={outreachForm.outcome} onChange={(e) => setOutreachForm((p) => ({ ...p, outcome: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                      <option value="Pending">Pending</option>
-                      <option value="Signed">Signed</option>
-                      <option value="Rejected">Rejected</option>
-                      <option value="No Response">No Response</option>
-                    </select>
+                    <EnumSelect
+                      id="o-outcome"
+                      value={outreachForm.outcome}
+                      onChange={(v) => setOutreachForm((p) => ({ ...p, outcome: v }))}
+                      options={dd.options.outcome}
+                    />
                   </div>
                   <div className="grid gap-2"><Label>Notes</Label><Input value={outreachForm.notes} onChange={(e) => setOutreachForm((p) => ({ ...p, notes: e.target.value }))} /></div>
                   <DialogFooter>
@@ -563,7 +601,7 @@ export default function CreatorDetailPage() {
             <Badge variant="outline">{contracts.length}</Badge>
           </div>
           {isAdmin && (
-            <Dialog open={contractDialogOpen} onOpenChange={(open) => { setContractDialogOpen(open); if (!open) { setContractEditing(null); setContractForm({ contract_type: "Exclusive Management", contract_status: "Draft", start_date: "", end_date: "", exclusivity: "No", renewal_reminder: "", notes: "" }); } }}>
+            <Dialog open={contractDialogOpen} onOpenChange={(open) => { setContractDialogOpen(open); if (!open) { setContractEditing(null); setContractForm(freshContractForm()); } }}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="secondary" className="glass"><Plus className="size-3" /> Add</Button>
               </DialogTrigger>
@@ -575,30 +613,30 @@ export default function CreatorDetailPage() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="grid gap-2">
                       <Label>Contract Type</Label>
-                      <select value={contractForm.contract_type} onChange={(e) => setContractForm((p) => ({ ...p, contract_type: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="Exclusive Management">Exclusive Management</option>
-                        <option value="Non-Exclusive Management">Non-Exclusive Management</option>
-                        <option value="Brand Deal Only">Brand Deal Only</option>
-                        <option value="Project-Based">Project-Based</option>
-                        <option value="Ambassadorship">Ambassadorship</option>
-                      </select>
+                      <EnumSelect
+                        id="ct-type"
+                        value={contractForm.contract_type}
+                        onChange={(v) => setContractForm((p) => ({ ...p, contract_type: v }))}
+                        options={dd.options.contract_type}
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label>Status</Label>
-                      <select value={contractForm.contract_status} onChange={(e) => setContractForm((p) => ({ ...p, contract_status: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="Draft">Draft</option>
-                        <option value="Active">Active</option>
-                        <option value="Renewed">Renewed</option>
-                        <option value="Expired">Expired</option>
-                        <option value="Terminated">Terminated</option>
-                      </select>
+                      <EnumSelect
+                        id="ct-status"
+                        value={contractForm.contract_status}
+                        onChange={(v) => setContractForm((p) => ({ ...p, contract_status: v }))}
+                        options={dd.options.contract_status}
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label>Exclusivity</Label>
-                      <select value={contractForm.exclusivity} onChange={(e) => setContractForm((p) => ({ ...p, exclusivity: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="No">No</option>
-                        <option value="Yes">Yes</option>
-                      </select>
+                      <EnumSelect
+                        id="ct-exclusivity"
+                        value={contractForm.exclusivity}
+                        onChange={(v) => setContractForm((p) => ({ ...p, exclusivity: v }))}
+                        options={dd.options.exclusivity}
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -662,7 +700,7 @@ export default function CreatorDetailPage() {
             <Badge variant="outline">{deals.length}</Badge>
           </div>
           {isAdmin && (
-            <Dialog open={dealDialogOpen} onOpenChange={(open) => { setDealDialogOpen(open); if (!open) { setDealEditing(null); setDealForm({ company_id: "", campaign: "", deal_value: "", agency_commission: "", campaign_status: "Pitched", invoice_status: "Not Sent", payment_status: "Pending", due_date: "", completion_date: "", notes: "" }); } }}>
+            <Dialog open={dealDialogOpen} onOpenChange={(open) => { setDealDialogOpen(open); if (!open) { setDealEditing(null); setDealForm(freshDealForm()); } }}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="secondary" className="glass"><Plus className="size-3" /> Add</Button>
               </DialogTrigger>
@@ -686,29 +724,30 @@ export default function CreatorDetailPage() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="grid gap-2">
                       <Label>Campaign Status</Label>
-                      <select value={dealForm.campaign_status} onChange={(e) => setDealForm((p) => ({ ...p, campaign_status: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="Pitched">Pitched</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Confirmed">Confirmed</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
+                      <EnumSelect
+                        id="d-campaign-status"
+                        value={dealForm.campaign_status}
+                        onChange={(v) => setDealForm((p) => ({ ...p, campaign_status: v }))}
+                        options={dd.options.campaign_status}
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label>Invoice Status</Label>
-                      <select value={dealForm.invoice_status} onChange={(e) => setDealForm((p) => ({ ...p, invoice_status: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="Not Sent">Not Sent</option>
-                        <option value="Sent">Sent</option>
-                        <option value="Overdue">Overdue</option>
-                      </select>
+                      <EnumSelect
+                        id="d-invoice"
+                        value={dealForm.invoice_status}
+                        onChange={(v) => setDealForm((p) => ({ ...p, invoice_status: v }))}
+                        options={dd.options.invoice_status}
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label>Payment Status</Label>
-                      <select value={dealForm.payment_status} onChange={(e) => setDealForm((p) => ({ ...p, payment_status: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="Pending">Pending</option>
-                        <option value="Partial">Partial</option>
-                        <option value="Paid">Paid</option>
-                      </select>
+                      <EnumSelect
+                        id="d-payment"
+                        value={dealForm.payment_status}
+                        onChange={(v) => setDealForm((p) => ({ ...p, payment_status: v }))}
+                        options={dd.options.payment_status}
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
