@@ -1,29 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { createClient } = require("@supabase/supabase-js");
 const { Clerk } = require("@clerk/backend");
-const fs = require("fs");
-const path = require("path");
 
-try { require("dotenv").config(); } catch { /* ignore */ }
-
-function loadEnvFile(file) {
-  const abs = path.resolve(process.cwd(), file);
-  if (!fs.existsSync(abs)) return;
-  const content = fs.readFileSync(abs, "utf8");
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-loadEnvFile(".env.local");
+// Env is loaded by the npm script: node --env-file-if-exists=.env.local
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -87,14 +66,19 @@ async function seed() {
   const coId = (name) => companyByName[name];
 
   const deals = [
-    { creator_id: id("Yuki Sato"), company_id: coId("CrunchyMerch Co."), campaign: "Summer Cosplay Capsule Launch", deal_value: 150000, agency_commission: 30000, campaign_status: "In Progress", invoice_status: "Sent", payment_status: "Pending", due_date: daysFromNow(14) },
-    { creator_id: id("Rina Kobayashi"), company_id: coId("AniPlay Studios"), campaign: "AnimeCon Mainstage Appearance", deal_value: 450000, agency_commission: 90000, campaign_status: "Confirmed", invoice_status: "Sent", payment_status: "Pending", due_date: daysFromNow(30) },
-    { creator_id: id("Aiko Tanaka"), company_id: coId("CrunchyMerch Co."), campaign: "Festival Merch Collab", deal_value: 80000, agency_commission: 16000, campaign_status: "Completed", invoice_status: "Sent", payment_status: "Paid", completion_date: daysFromNow(-10) },
-    { creator_id: id("Daiki Mori"), company_id: coId("AniPlay Studios"), campaign: "Cosplay Workshop Series", deal_value: 95000, agency_commission: 19000, campaign_status: "Pitched", invoice_status: "Overdue", payment_status: "Pending", due_date: daysFromNow(-3) },
-    { creator_id: id("Sora Ito"), company_id: coId("CrunchyMerch Co."), campaign: "Small Creator Capsule", deal_value: 45000, agency_commission: 9000, campaign_status: "Cancelled", invoice_status: "Not Sent", payment_status: "Pending" },
+    { company_id: coId("CrunchyMerch Co."), campaign: "Summer Cosplay Capsule Launch", deal_value: 150000, agency_commission: 30000, campaign_status: "In Progress", invoice_status: "Sent", payment_status: "Pending", due_date: daysFromNow(14), creators: ["Yuki Sato", "Daiki Mori"] },
+    { company_id: coId("AniPlay Studios"), campaign: "AnimeCon Mainstage Appearance", deal_value: 450000, agency_commission: 90000, campaign_status: "Confirmed", invoice_status: "Sent", payment_status: "Pending", due_date: daysFromNow(30), creators: ["Rina Kobayashi"] },
+    { company_id: coId("CrunchyMerch Co."), campaign: "Festival Merch Collab", deal_value: 80000, agency_commission: 16000, campaign_status: "Completed", invoice_status: "Sent", payment_status: "Paid", completion_date: daysFromNow(-10), creators: ["Aiko Tanaka"] },
+    { company_id: coId("AniPlay Studios"), campaign: "Cosplay Workshop Series", deal_value: 95000, agency_commission: 19000, campaign_status: "Pitched", invoice_status: "Overdue", payment_status: "Pending", due_date: daysFromNow(-3), creators: ["Daiki Mori"] },
+    { company_id: coId("CrunchyMerch Co."), campaign: "Small Creator Capsule", deal_value: 45000, agency_commission: 9000, campaign_status: "Cancelled", invoice_status: "Not Sent", payment_status: "Pending", creators: ["Sora Ito", "Kenji Watanabe"] },
   ];
-  const { error: dealsError } = await supabase.from("deals").insert(deals);
-  if (dealsError) throw new Error("deals insert: " + dealsError.message);
+  for (const { creators: creatorNames, ...deal } of deals) {
+    const { data, error } = await supabase.from("deals").insert([deal]).select("id");
+    if (error) throw new Error("deals insert: " + error.message);
+    const links = creatorNames.map((creator_name) => ({ deal_id: data[0].id, creator_id: id(creator_name) }));
+    const { error: linkError } = await supabase.from("deal_creators").insert(links);
+    if (linkError) throw new Error("deal_creators insert: " + linkError.message);
+  }
 
   const outreach = [
     { creator_id: id("Aiko Tanaka"), contact_method: "Email", date_contacted: daysFromNow(-21), current_status: "Negotiating", outcome: "Pending", next_follow_up_date: daysFromNow(7) },

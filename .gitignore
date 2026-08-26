@@ -43,3 +43,9 @@ next-env.d.ts
 .dev
 .superpowers
 .vscode
+
+/docs
+
+AGENTS.md
+CLAUDE.md
+PROMPT.md
