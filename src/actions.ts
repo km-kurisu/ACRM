@@ -20,6 +20,7 @@ import {
   type FilterVisibility,
 } from "@/lib/custom-filters";
 import { DEFAULT_WORKSPACE_ID, type PresenceStatus } from "@/lib/presence";
+import type { TableViewPrefs } from "@/lib/table-view";
 
 function fail(error: { message?: string } | null): never {
   throw new Error(error?.message || "Database error");
@@ -858,5 +859,37 @@ export async function deleteCustomFilter(id: string) {
   if (fetchError || !data) throw new Error("Filter not found");
   await assertCanEditFilter(data as CustomFilterRecord);
   const { error } = await db.from("custom_filters").delete().eq("id", id);
+  if (error) fail(error);
+}
+
+// ---------- Table view preferences ----------
+
+export async function getTableViewPrefs(tableKey: string): Promise<TableViewPrefs> {
+  const userId = await requireUser();
+
+  const { data, error } = await db
+    .from("table_view_prefs")
+    .select("prefs")
+    .eq("user_id", userId)
+    .eq("table_key", tableKey)
+    .maybeSingle();
+  if (error) fail(error);
+
+  return (data?.prefs as TableViewPrefs | null) ?? {};
+}
+
+export async function saveTableViewPrefs(tableKey: string, prefs: TableViewPrefs): Promise<void> {
+  const userId = await requireUser();
+  await ensureUserRow(userId);
+
+  const { error } = await db.from("table_view_prefs").upsert(
+    {
+      user_id: userId,
+      table_key: tableKey,
+      prefs,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,table_key" }
+  );
   if (error) fail(error);
 }

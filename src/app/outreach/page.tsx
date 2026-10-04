@@ -6,13 +6,19 @@ import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Outreach, Creator } from "@/lib/types";
 import { createOutreach, deleteOutreach, listOutreach, listCreators, updateOutreach, type OutreachWithCreator } from "@/actions";
+import { dateColumn, textColumn, type DataColumn } from "@/components/data-table-columns";
 import { OUTREACH_STATUS_COLORS } from "@/lib/colors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { DraggableTableHead, useColumnDrag } from "@/components/draggable-table-head";
+import { ResetColumnsButton } from "@/components/reset-columns-button";
+import { ColumnSettings } from "@/components/column-settings";
+import { useTableView } from "@/lib/use-table-view";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogTrigger,
@@ -155,6 +161,74 @@ export default function OutreachPage() {
     }
   }
 
+  const columns: DataColumn<OutreachWithCreator>[] = [
+    {
+      key: "creator",
+      label: "Creator",
+      cellClassName: "font-medium",
+      render: (item) => item.creators?.creator_name ?? "—",
+    },
+    {
+      key: "contact_method",
+      label: "Method",
+      render: (item) => <Badge variant="outline">{item.contact_method || "—"}</Badge>,
+    },
+    {
+      key: "current_status",
+      label: "Status",
+      render: (item) => (
+        <Badge className={OUTREACH_STATUS_COLORS[item.current_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {item.current_status || "—"}
+        </Badge>
+      ),
+    },
+    dateColumn("date_contacted", "Contacted", (item) => item.date_contacted),
+    dateColumn("next_follow_up_date", "Next follow-up", (item) => item.next_follow_up_date),
+    textColumn("outcome", "Outcome", (item) => item.outcome, "max-w-[220px] truncate text-muted-foreground"),
+    {
+      key: "actions",
+      label: "Actions",
+      align: "right",
+      render: (item) =>
+        isAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Actions for outreach record">
+                <MoreVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="glass-strong">
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditing(item);
+                  setForm({
+                    creator_id: item.creator_id ?? "",
+                    contact_method: item.contact_method ?? "Email",
+                    date_contacted: item.date_contacted ?? "",
+                    next_follow_up_date: item.next_follow_up_date ?? "",
+                    current_status: item.current_status ?? "No Response",
+                    outcome: item.outcome ?? "",
+                    notes: item.notes ?? "",
+                  });
+                  setDialogOpen(true);
+                }}
+              >
+                <Pencil className="size-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => handleDelete(item)}>
+                <Trash2 className="size-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+    },
+  ];
+
+  const { ordered, all, hidden, moveColumn, toggleColumn, renameColumn, reset, canReset } =
+    useTableView("outreach", columns);
+  const drag = useColumnDrag(moveColumn);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -271,6 +345,13 @@ export default function OutreachPage() {
               onChange={(e) => setQuery(e.target.value)}
               className="w-full sm:w-72"
             />
+            <ColumnSettings
+              columns={all}
+              hidden={hidden}
+              onToggle={toggleColumn}
+              onRename={renameColumn}
+            />
+            <ResetColumnsButton onReset={reset} visible={canReset} />
           </div>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
@@ -278,68 +359,38 @@ export default function OutreachPage() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Creator</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Contacted</TableHead>
-                  <TableHead>Next follow-up</TableHead>
-                  <TableHead>Outcome</TableHead>
-                  <TableHead className="pr-6 text-right">Actions</TableHead>
+                  {ordered.map((col, i) => (
+                    <DraggableTableHead
+                      key={col.key}
+                      columnKey={col.key}
+                      drag={drag}
+                      className={cn(
+                        i === 0 && "pl-6",
+                        i === ordered.length - 1 && "pr-6",
+                        col.align === "right" && "text-right"
+                      )}
+                    >
+                      {col.label}
+                    </DraggableTableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-accent/40">
-                    <TableCell className="pl-6 font-medium">{item.creators?.creator_name ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{item.contact_method || "—"}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={OUTREACH_STATUS_COLORS[item.current_status ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {item.current_status || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {item.date_contacted ? new Date(item.date_contacted).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {item.next_follow_up_date ? new Date(item.next_follow_up_date).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell className="max-w-[220px] truncate text-muted-foreground">{item.outcome || "—"}</TableCell>
-                    <TableCell className="pr-6 text-right">
-                      {isAdmin && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label="Actions for outreach record">
-                              <MoreVertical className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="glass-strong">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditing(item);
-                                setForm({
-                                  creator_id: item.creator_id ?? "",
-                                  contact_method: item.contact_method ?? "Email",
-                                  date_contacted: item.date_contacted ?? "",
-                                  next_follow_up_date: item.next_follow_up_date ?? "",
-                                  current_status: item.current_status ?? "No Response",
-                                  outcome: item.outcome ?? "",
-                                  notes: item.notes ?? "",
-                                });
-                                setDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="size-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(item)}>
-                              <Trash2 className="size-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
+                {filtered.map((row) => (
+                  <TableRow key={row.id} className="hover:bg-accent/40">
+                    {ordered.map((col, i) => (
+                      <TableCell
+                        key={col.key}
+                        className={cn(
+                          col.cellClassName,
+                          i === 0 && "pl-6",
+                          i === ordered.length - 1 && "pr-6",
+                          col.align === "right" && "text-right"
+                        )}
+                      >
+                        {col.render(row)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>

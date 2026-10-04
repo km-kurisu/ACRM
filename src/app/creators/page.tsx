@@ -8,10 +8,20 @@ import { listCustomFilters, listMasterData, type MasterDataRow } from "@/actions
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { DraggableTableHead, useColumnDrag } from "@/components/draggable-table-head";
+import { ResetColumnsButton } from "@/components/reset-columns-button";
+import { ColumnSettings } from "@/components/column-settings";
+import { useTableView } from "@/lib/use-table-view";
+import { cn } from "@/lib/utils";
 import { MGMT_COLORS, PRIORITY_COLORS } from "@/lib/colors";
 import { CustomFilterPicker, useActiveFilterIds } from "@/components/custom-filter-picker";
 import { matchesFilter, type CustomFilter } from "@/lib/custom-filters";
+import { textColumn, type DataColumn } from "@/components/data-table-columns";
+
+function followerCount(value: number | null | undefined) {
+  return value != null && value > 0 ? value.toLocaleString("en-IN") : "—";
+}
 
 function CreatorsInner() {
   const [rows, setRows] = useState<MasterDataRow[]>([]);
@@ -62,9 +72,81 @@ function CreatorsInner() {
       )
     : customFiltered;
 
-  function fmtNum(value: number | null | undefined) {
-    return value != null && value > 0 ? value.toLocaleString("en-IN") : "—";
-  }
+  const columns: DataColumn<MasterDataRow>[] = [
+    {
+      key: "creator_name",
+      label: "Creator Name",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {row.creator_name.charAt(0).toUpperCase()}
+          </div>
+          <Link
+            href={`/creators/${row.id}`}
+            className="whitespace-nowrap font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {row.creator_name}
+          </Link>
+        </div>
+      ),
+    },
+    textColumn("creator_type", "Type", (r) => r.creator_type),
+    textColumn("niche", "Niche", (r) => r.niche),
+    textColumn("email", "Email", (r) => r.email),
+    textColumn("city", "City", (r) => r.city),
+    textColumn("country", "Country", (r) => r.country),
+    {
+      key: "followers_instagram",
+      label: "Followers (IG)",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => followerCount(row.followers_instagram),
+    },
+    {
+      key: "followers_youtube",
+      label: "Followers (YT)",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => followerCount(row.followers_youtube),
+    },
+    {
+      key: "total_reach",
+      label: "Total Reach",
+      align: "right",
+      cellClassName: "font-semibold tabular-nums",
+      render: (row) => followerCount(row.total_reach),
+    },
+    {
+      key: "engagement_rate",
+      label: "Engagement",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => (row.engagement_rate != null ? `${row.engagement_rate}%` : "—"),
+    },
+    {
+      key: "management_status",
+      label: "Mgmt Status",
+      render: (row) => (
+        <Badge className={MGMT_COLORS[row.management_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {row.management_status || "—"}
+        </Badge>
+      ),
+    },
+    textColumn("assigned_manager", "Manager", (r) => r.assigned_manager),
+    {
+      key: "priority",
+      label: "Priority",
+      render: (row) => (
+        <Badge className={PRIORITY_COLORS[row.priority ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {row.priority || "—"}
+        </Badge>
+      ),
+    },
+  ];
+
+  const { ordered, all, hidden, moveColumn, toggleColumn, renameColumn, reset, canReset } =
+    useTableView("creators", columns);
+  const drag = useColumnDrag(moveColumn);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
@@ -86,14 +168,21 @@ function CreatorsInner() {
               className="w-full sm:w-72"
             />
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              Click a name to view details · Scroll right for all columns
+              Click a name to view details · Drag headers to reorder
             </span>
             {activeConditions.length > 0 && loaded && (
               <span className="hidden text-xs text-muted-foreground md:inline">
                 {filtered.length} of {rows.length} shown
               </span>
             )}
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <ColumnSettings
+              columns={all}
+              hidden={hidden}
+              onToggle={toggleColumn}
+              onRename={renameColumn}
+            />
+            <ResetColumnsButton onReset={reset} visible={canReset} />
               <CustomFilterPicker />
             </div>
           </div>
@@ -103,59 +192,38 @@ function CreatorsInner() {
             <Table className="min-w-max">
               <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Creator Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Niche</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead className="text-right">Followers (IG)</TableHead>
-                  <TableHead className="text-right">Followers (YT)</TableHead>
-                  <TableHead className="text-right">Total Reach</TableHead>
-                  <TableHead className="text-right">Engagement</TableHead>
-                  <TableHead>Mgmt Status</TableHead>
-                  <TableHead>Manager</TableHead>
-                  <TableHead>Priority</TableHead>
+                  {ordered.map((col, i) => (
+                    <DraggableTableHead
+                      key={col.key}
+                      columnKey={col.key}
+                      drag={drag}
+                      className={cn(
+                        i === 0 && "pl-6",
+                        i === ordered.length - 1 && "pr-6",
+                        col.align === "right" && "text-right"
+                      )}
+                    >
+                      {col.label}
+                    </DraggableTableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((row) => (
                   <TableRow key={row.id} className="hover:bg-accent/40">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-2">
-                        <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                          {row.creator_name.charAt(0).toUpperCase()}
-                        </div>
-                        <Link
-                          href={`/creators/${row.id}`}
-                          className="whitespace-nowrap font-medium text-primary underline-offset-4 hover:underline"
-                        >
-                          {row.creator_name}
-                        </Link>
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.creator_type || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.niche || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.email || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.city || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.country || "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtNum(row.followers_instagram)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtNum(row.followers_youtube)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{fmtNum(row.total_reach)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.engagement_rate != null ? `${row.engagement_rate}%` : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={MGMT_COLORS[row.management_status ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {row.management_status || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.assigned_manager || "—"}</TableCell>
-                    <TableCell>
-                      <Badge className={PRIORITY_COLORS[row.priority ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {row.priority || "—"}
-                      </Badge>
-                    </TableCell>
+                    {ordered.map((col, i) => (
+                      <TableCell
+                        key={col.key}
+                        className={cn(
+                          col.cellClassName,
+                          i === 0 && "pl-6",
+                          i === ordered.length - 1 && "pr-6",
+                          col.align === "right" && "text-right"
+                        )}
+                      >
+                        {col.render(row)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>

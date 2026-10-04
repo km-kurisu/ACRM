@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { dateColumn, textColumn, type DataColumn } from "@/components/data-table-columns";
+import { DraggableTableHead, useColumnDrag } from "@/components/draggable-table-head";
+import { ResetColumnsButton } from "@/components/reset-columns-button";
+import { ColumnSettings } from "@/components/column-settings";
+import { useTableView } from "@/lib/use-table-view";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogTrigger,
@@ -193,6 +199,48 @@ export default function CompaniesPage() {
     }
   }
 
+  const columns: DataColumn<CompanyWithContacts>[] = [
+    {
+      key: "name",
+      label: "Name",
+      render: (row) => <p className="truncate font-medium">{row.name}</p>,
+    },
+    textColumn("domain", "Domain", (row) => row.domain),
+    textColumn("industry", "Industry", (row) => row.industry),
+    textColumn("poc", "POC", (row) => row.company_contacts.find((c) => c.is_poc)?.name),
+    dateColumn("last_contacted", "Last contacted", (row) => row.last_contacted, "whitespace-nowrap tabular-nums text-muted-foreground"),
+    dateColumn("next_meeting", "Next meeting", (row) => row.next_meeting, "whitespace-nowrap tabular-nums text-muted-foreground"),
+    dateColumn("created_at", "Created", (row) => row.created_at, "whitespace-nowrap tabular-nums text-muted-foreground"),
+    {
+      key: "actions",
+      label: "Actions",
+      align: "right",
+      render: (row) =>
+        isAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label={`Actions for ${row.name}`}>
+                <MoreVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="glass-strong">
+              <DropdownMenuItem onClick={() => openEdit(row)}>
+                <Pencil className="size-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => handleDelete(row)}>
+                <Trash2 className="size-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+    },
+  ];
+
+  const { ordered, all, hidden, moveColumn, toggleColumn, renameColumn, reset, canReset } =
+    useTableView("companies", columns);
+  const drag = useColumnDrag(moveColumn);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -201,6 +249,15 @@ export default function CompaniesPage() {
           <p className="mt-1 text-muted-foreground">
             {loaded ? `${companies.length} compan${companies.length === 1 ? "y" : "ies"} tracked.` : "Loading companies…"}
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ColumnSettings
+            columns={all}
+            hidden={hidden}
+            onToggle={toggleColumn}
+            onRename={renameColumn}
+          />
+          <ResetColumnsButton onReset={reset} visible={canReset} />
         </div>
         <Dialog
           open={dialogOpen}
@@ -317,56 +374,38 @@ export default function CompaniesPage() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Name</TableHead>
-                  <TableHead>Domain</TableHead>
-                  <TableHead>Industry</TableHead>
-                  <TableHead>POC</TableHead>
-                  <TableHead>Last contacted</TableHead>
-                  <TableHead>Next meeting</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="pr-6 text-right">Actions</TableHead>
+                  {ordered.map((col, i) => (
+                    <DraggableTableHead
+                      key={col.key}
+                      columnKey={col.key}
+                      drag={drag}
+                      className={cn(
+                        i === 0 && "pl-6",
+                        i === ordered.length - 1 && "pr-6",
+                        col.align === "right" && "text-right"
+                      )}
+                    >
+                      {col.label}
+                    </DraggableTableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {companies.map((row) => (
                   <TableRow key={row.id} className="hover:bg-accent/40">
-                    <TableCell className="pl-6">
-                      <p className="truncate font-medium">{row.name}</p>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.domain || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.industry || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {row.company_contacts.find((c) => c.is_poc)?.name || "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
-                      {row.last_contacted ? new Date(row.last_contacted).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
-                      {row.next_meeting ? new Date(row.next_meeting).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
-                      {new Date(row.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
-                      {isAdmin && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label={`Actions for ${row.name}`}>
-                              <MoreVertical className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="glass-strong">
-                            <DropdownMenuItem onClick={() => openEdit(row)}>
-                              <Pencil className="size-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(row)}>
-                              <Trash2 className="size-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
+                    {ordered.map((col, i) => (
+                      <TableCell
+                        key={col.key}
+                        className={cn(
+                          col.cellClassName,
+                          i === 0 && "pl-6",
+                          i === ordered.length - 1 && "pr-6",
+                          col.align === "right" && "text-right"
+                        )}
+                      >
+                        {col.render(row)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>

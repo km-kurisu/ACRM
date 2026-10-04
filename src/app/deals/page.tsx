@@ -6,6 +6,7 @@ import { useUser } from "@clerk/nextjs";
 import { Search, Plus, MoreVertical, Pencil, Trash2, Users, Building2 } from "lucide-react";
 import { Deal, Creator, Company } from "@/lib/types";
 import { createDeal, deleteDeal, listDeals, listCreators, listCompanies, updateDeal, type DealWithRefs } from "@/actions";
+import { textColumn, type DataColumn } from "@/components/data-table-columns";
 import { DEAL_STATUS_COLORS } from "@/lib/colors";
 import { EnumSelect } from "@/components/enum-select";
 import { pickOption, useDropdownOptions } from "@/lib/use-dropdown-options";
@@ -14,7 +15,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { DraggableTableHead, useColumnDrag } from "@/components/draggable-table-head";
+import { ResetColumnsButton } from "@/components/reset-columns-button";
+import { ColumnSettings } from "@/components/column-settings";
+import { useTableView } from "@/lib/use-table-view";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogTrigger,
@@ -194,6 +200,117 @@ export default function DealsPage() {
 
   const companyOptions = companies.map((c) => ({ id: c.id, label: c.name }));
 
+  const columns: DataColumn<DealWithRefs>[] = [
+    {
+      key: "campaign",
+      label: "Campaign",
+      render: (deal) => (
+        <div className="min-w-0">
+          <p className="truncate font-medium">{deal.campaign || "Untitled"}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {deal.due_date ? `Due ${new Date(deal.due_date).toLocaleDateString()}` : ""}
+            {deal.completion_date ? ` · Done ${new Date(deal.completion_date).toLocaleDateString()}` : ""}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "creators",
+      label: "Creators",
+      render: (deal) =>
+        deal.creators.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {deal.creators.map((c) => (
+              <Badge key={c.id} variant="outline" className="max-w-[160px] truncate">
+                {c.creator_name}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    textColumn("company", "Company", (deal) => deal.companies?.name),
+    {
+      key: "deal_value",
+      label: "Value",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (deal) => (deal.deal_value != null ? `$${deal.deal_value.toLocaleString()}` : "—"),
+    },
+    {
+      key: "agency_commission",
+      label: "Commission",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (deal) => (deal.agency_commission != null ? `$${deal.agency_commission.toLocaleString()}` : "—"),
+    },
+    {
+      key: "campaign_status",
+      label: "Status",
+      render: (deal) => (
+        <Badge className={DEAL_STATUS_COLORS[deal.campaign_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {deal.campaign_status || "—"}
+        </Badge>
+      ),
+    },
+    {
+      key: "payment_status",
+      label: "Payment",
+      render: (deal) => (
+        <Badge className={PAYMENT_COLORS[deal.payment_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {deal.payment_status || "—"}
+        </Badge>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      align: "right",
+      render: (deal) =>
+        isAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label={`Actions for ${deal.campaign}`}>
+                <MoreVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="glass-strong">
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditing(deal);
+                  setForm({
+                    creator_ids: deal.creators.map((c) => c.id),
+                    company_id: deal.company_id ?? "",
+                    campaign: deal.campaign ?? "",
+                    deal_value: deal.deal_value != null ? String(deal.deal_value) : "",
+                    agency_commission: deal.agency_commission != null ? String(deal.agency_commission) : "",
+                    campaign_status: deal.campaign_status ?? "Pitched",
+                    invoice_status: deal.invoice_status ?? "Not Sent",
+                    payment_status: deal.payment_status ?? "Pending",
+                    due_date: deal.due_date ?? "",
+                    completion_date: deal.completion_date ?? "",
+                    notes: deal.notes ?? "",
+                  });
+                  setDialogOpen(true);
+                }}
+              >
+                <Pencil className="size-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => handleDelete(deal)}>
+                <Trash2 className="size-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+    },
+  ];
+
+  const { ordered, all, hidden, moveColumn, toggleColumn, renameColumn, reset, canReset } =
+    useTableView("deals", columns);
+  const drag = useColumnDrag(moveColumn);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -369,6 +486,13 @@ export default function DealsPage() {
               onChange={(e) => setQuery(e.target.value)}
               className="w-full sm:w-72"
             />
+            <ColumnSettings
+              columns={all}
+              hidden={hidden}
+              onToggle={toggleColumn}
+              onRename={renameColumn}
+            />
+            <ResetColumnsButton onReset={reset} visible={canReset} />
           </div>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
@@ -376,96 +500,38 @@ export default function DealsPage() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Campaign</TableHead>
-                  <TableHead>Creators</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead className="text-right">Value</TableHead>
-                  <TableHead className="text-right">Commission</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead className="pr-6 text-right">Actions</TableHead>
+                  {ordered.map((col, i) => (
+                    <DraggableTableHead
+                      key={col.key}
+                      columnKey={col.key}
+                      drag={drag}
+                      className={cn(
+                        i === 0 && "pl-6",
+                        i === ordered.length - 1 && "pr-6",
+                        col.align === "right" && "text-right"
+                      )}
+                    >
+                      {col.label}
+                    </DraggableTableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((deal) => (
-                  <TableRow key={deal.id} className="hover:bg-accent/40">
-                    <TableCell className="pl-6">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{deal.campaign || "Untitled"}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {deal.due_date ? `Due ${new Date(deal.due_date).toLocaleDateString()}` : ""}
-                          {deal.completion_date ? ` · Done ${new Date(deal.completion_date).toLocaleDateString()}` : ""}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {deal.creators.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {deal.creators.map((c) => (
-                            <Badge key={c.id} variant="outline" className="max-w-[160px] truncate">
-                              {c.creator_name}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{deal.companies?.name ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {deal.deal_value != null ? `$${deal.deal_value.toLocaleString()}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {deal.agency_commission != null ? `$${deal.agency_commission.toLocaleString()}` : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={DEAL_STATUS_COLORS[deal.campaign_status ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {deal.campaign_status || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={PAYMENT_COLORS[deal.payment_status ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {deal.payment_status || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
-                      {isAdmin && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label={`Actions for ${deal.campaign}`}>
-                              <MoreVertical className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="glass-strong">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditing(deal);
-                                setForm({
-                                  creator_ids: deal.creators.map((c) => c.id),
-                                  company_id: deal.company_id ?? "",
-                                  campaign: deal.campaign ?? "",
-                                  deal_value: deal.deal_value != null ? String(deal.deal_value) : "",
-                                  agency_commission: deal.agency_commission != null ? String(deal.agency_commission) : "",
-                                  campaign_status: deal.campaign_status ?? "Pitched",
-                                  invoice_status: deal.invoice_status ?? "Not Sent",
-                                  payment_status: deal.payment_status ?? "Pending",
-                                  due_date: deal.due_date ?? "",
-                                  completion_date: deal.completion_date ?? "",
-                                  notes: deal.notes ?? "",
-                                });
-                                setDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="size-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(deal)}>
-                              <Trash2 className="size-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
+                {filtered.map((row) => (
+                  <TableRow key={row.id} className="hover:bg-accent/40">
+                    {ordered.map((col, i) => (
+                      <TableCell
+                        key={col.key}
+                        className={cn(
+                          col.cellClassName,
+                          i === 0 && "pl-6",
+                          i === ordered.length - 1 && "pr-6",
+                          col.align === "right" && "text-right"
+                        )}
+                      >
+                        {col.render(row)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>

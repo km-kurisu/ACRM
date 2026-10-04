@@ -6,8 +6,18 @@ import { toast } from "sonner";
 import { ExternalLink } from "lucide-react";
 import { listPages, type CreatorPageRow } from "@/actions";
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { DraggableTableHead, useColumnDrag } from "@/components/draggable-table-head";
+import { ResetColumnsButton } from "@/components/reset-columns-button";
+import { ColumnSettings } from "@/components/column-settings";
+import { useTableView } from "@/lib/use-table-view";
+import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { textColumn, type DataColumn } from "@/components/data-table-columns";
+
+function followerCount(value: number | null | undefined) {
+  return value != null && value > 0 ? value.toLocaleString("en-IN") : "—";
+}
 
 const PLATFORMS = ["Instagram", "YouTube", "X (Twitter)", "Other"] as const;
 
@@ -27,11 +37,79 @@ function PagesInner() {
       .finally(() => setLoading(false));
   }, []);
 
-  function fmtNum(value: number | null | undefined) {
-    return value != null && value > 0 ? value.toLocaleString("en-IN") : "—";
-  }
-
   const filtered = platform === "all" ? rows : rows.filter((r) => r.platform === platform);
+
+  const columns: DataColumn<CreatorPageRow>[] = [
+    {
+      key: "creator",
+      label: "Creator",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {row.creator_name.charAt(0).toUpperCase()}
+          </div>
+          <Link
+            href={`/creators/${row.creator_id}`}
+            className="whitespace-nowrap font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {row.creator_name}
+          </Link>
+        </div>
+      ),
+    },
+    textColumn("platform", "Platform", (r) => r.platform),
+    {
+      key: "page",
+      label: "Page",
+      cellClassName: "whitespace-nowrap",
+      render: (row) =>
+        row.url ? (
+          <a
+            href={row.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+          >
+            @{row.handle}
+            <ExternalLink className="size-3" />
+          </a>
+        ) : (
+          <span className="text-muted-foreground">@{row.handle}</span>
+        ),
+    },
+    {
+      key: "followers",
+      label: "Followers",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => followerCount(row.followers),
+    },
+    {
+      key: "total_followers",
+      label: "Total Followers",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => followerCount(row.total_followers),
+    },
+    {
+      key: "brand_deal_value",
+      label: "Brand Deal Value",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => (row.brand_deal_value > 0 ? `$${row.brand_deal_value.toLocaleString()}` : "—"),
+    },
+    {
+      key: "engagement_rate",
+      label: "Engagement",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => (row.engagement_rate != null ? `${row.engagement_rate}%` : "—"),
+    },
+  ];
+
+  const { ordered, all, hidden, moveColumn, toggleColumn, renameColumn, reset, canReset } =
+    useTableView("pages", columns);
+  const drag = useColumnDrag(moveColumn);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
@@ -48,7 +126,14 @@ function PagesInner() {
             <CardTitle>Social Media Pages</CardTitle>
             <CardDescription>One row per platform page. Deal values and engagement are per creator.</CardDescription>
           </div>
-          <div className="sm:ml-auto">
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <ColumnSettings
+              columns={all}
+              hidden={hidden}
+              onToggle={toggleColumn}
+              onRename={renameColumn}
+            />
+            <ResetColumnsButton onReset={reset} visible={canReset} />
             <Select value={platform} onValueChange={setPlatform}>
               <SelectTrigger className="w-44">
                 <SelectValue placeholder="Platform" />
@@ -69,55 +154,38 @@ function PagesInner() {
             <Table className="min-w-max">
               <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Creator</TableHead>
-                  <TableHead>Platform</TableHead>
-                  <TableHead>Page</TableHead>
-                  <TableHead className="text-right">Followers</TableHead>
-                  <TableHead className="text-right">Total Followers</TableHead>
-                  <TableHead className="text-right">Brand Deal Value</TableHead>
-                  <TableHead className="pr-6 text-right">Engagement</TableHead>
+                  {ordered.map((col, i) => (
+                    <DraggableTableHead
+                      key={col.key}
+                      columnKey={col.key}
+                      drag={drag}
+                      className={cn(
+                        i === 0 && "pl-6",
+                        i === ordered.length - 1 && "pr-6",
+                        col.align === "right" && "text-right"
+                      )}
+                    >
+                      {col.label}
+                    </DraggableTableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((row) => (
                   <TableRow key={`${row.creator_id}-${row.platform}`} className="hover:bg-accent/40">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-2">
-                        <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                          {row.creator_name.charAt(0).toUpperCase()}
-                        </div>
-                        <Link
-                          href={`/creators/${row.creator_id}`}
-                          className="whitespace-nowrap font-medium text-primary underline-offset-4 hover:underline"
-                        >
-                          {row.creator_name}
-                        </Link>
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.platform}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {row.url ? (
-                        <a
-                          href={row.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-                        >
-                          @{row.handle}
-                          <ExternalLink className="size-3" />
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground">@{row.handle}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtNum(row.followers)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtNum(row.total_followers)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.brand_deal_value > 0 ? `$${row.brand_deal_value.toLocaleString()}` : "—"}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right tabular-nums">
-                      {row.engagement_rate != null ? `${row.engagement_rate}%` : "—"}
-                    </TableCell>
+                    {ordered.map((col, i) => (
+                      <TableCell
+                        key={col.key}
+                        className={cn(
+                          col.cellClassName,
+                          i === 0 && "pl-6",
+                          i === ordered.length - 1 && "pr-6",
+                          col.align === "right" && "text-right"
+                        )}
+                      >
+                        {col.render(row)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>
