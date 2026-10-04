@@ -600,3 +600,32 @@ alter table public.contracts drop constraint if exists contracts_contract_status
 alter table public.deals     drop constraint if exists deals_campaign_status_check;
 alter table public.deals     drop constraint if exists deals_invoice_status_check;
 alter table public.deals     drop constraint if exists deals_payment_status_check;
+
+-- ------------------------------------------------------------
+-- table_view_prefs — per-user table view state
+-- One row per (user, table_key). `prefs` holds the column layout:
+--   { "order": ["email", "creator_name", ...] }
+-- Read/written via getTableViewPrefs / saveTableViewPrefs.
+-- Personal by definition — viewers may save their own layout.
+-- ------------------------------------------------------------
+create table if not exists public.table_view_prefs (
+    user_id text not null references public.users(id) on delete cascade,
+    table_key text not null,
+    prefs jsonb not null default '{}'::jsonb,
+    updated_at timestamp with time zone not null default timezone('utc'::text, now()),
+    primary key (user_id, table_key)
+);
+
+alter table public.table_view_prefs enable row level security;
+
+create policy "table_view_prefs select own" on public.table_view_prefs
+    for select using (auth.uid()::text = user_id);
+
+create policy "table_view_prefs insert own" on public.table_view_prefs
+    for insert with check (auth.uid()::text = user_id);
+
+create policy "table_view_prefs update own" on public.table_view_prefs
+    for update using (auth.uid()::text = user_id);
+
+create policy "table_view_prefs delete own" on public.table_view_prefs
+    for delete using (auth.uid()::text = user_id);

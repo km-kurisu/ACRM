@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { DraggableTableHead, useColumnDrag } from "@/components/draggable-table-head";
+import { dateColumn, numberColumn, textColumn, type DataColumn } from "@/components/data-table-columns";
+import { ResetColumnsButton } from "@/components/reset-columns-button";
+import { ColumnSettings } from "@/components/column-settings";
+import { useTableView } from "@/lib/use-table-view";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogTrigger,
@@ -38,6 +44,26 @@ import {
 import { listCustomFilters } from "@/actions";
 import { CustomFilterPicker, useActiveFilterIds } from "@/components/custom-filter-picker";
 import { matchesFilter, type CustomFilter } from "@/lib/custom-filters";
+
+const TABLE_KEY = "master_data";
+
+function yesNoColumn(
+  key: string,
+  label: string,
+  get: (row: MasterDataRow) => string | null | undefined
+): DataColumn<MasterDataRow> {
+  return {
+    key,
+    label,
+    cellClassName: "whitespace-nowrap text-muted-foreground",
+    render: (row) => {
+      const value = get(row);
+      if (value == null) return "—";
+      if (typeof value === "string") return value === "Yes" ? "Yes" : "No";
+      return value ? "Yes" : "No";
+    },
+  };
+}
 
 function MasterDataInner() {
   const { user } = useUser();
@@ -103,20 +129,6 @@ function MasterDataInner() {
     setForm((prev) => ({ ...prev, ...v }));
   }
 
-  function fmtDate(value: string | null | undefined) {
-    return value ? new Date(value).toLocaleDateString() : "—";
-  }
-
-  function fmtNum(value: number | null | undefined) {
-    return value != null && value > 0 ? value.toLocaleString() : "—";
-  }
-
-  function yesNo(value: boolean | string | null | undefined) {
-    if (value == null) return "—";
-    if (typeof value === "string") return value === "Yes" ? "Yes" : "No";
-    return value ? "Yes" : "No";
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -149,6 +161,114 @@ function MasterDataInner() {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
     }
   }
+
+  const columns: DataColumn<MasterDataRow>[] = [
+    {
+      key: "creator_name",
+      label: "Creator Name",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <div className="grid size-7 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
+            {row.creator_name.charAt(0).toUpperCase()}
+          </div>
+          <span className="whitespace-nowrap font-medium">{row.creator_name}</span>
+        </div>
+      ),
+    },
+    textColumn("creator_type", "Type", (r) => r.creator_type),
+    textColumn("instagram", "Instagram", (r) => r.instagram),
+    textColumn("youtube", "YouTube", (r) => r.youtube),
+    textColumn("x_twitter", "X (Twitter)", (r) => r.x_twitter),
+    textColumn("other_platforms", "Other Platforms", (r) => r.other_platforms),
+    textColumn("email", "Email", (r) => r.email),
+    textColumn("phone_number", "Phone", (r) => r.phone_number),
+    textColumn("city", "City", (r) => r.city),
+    textColumn("state", "State", (r) => r.state),
+    textColumn("country", "Country", (r) => r.country),
+    textColumn("niche", "Niche", (r) => r.niche),
+    numberColumn("followers_instagram", "Followers (IG)", (r) => r.followers_instagram),
+    numberColumn("followers_youtube", "Followers (YT)", (r) => r.followers_youtube),
+    numberColumn("total_reach", "Total Reach", (r) => r.total_reach, "font-semibold tabular-nums"),
+    {
+      key: "engagement_rate",
+      label: "Engagement",
+      align: "right",
+      cellClassName: "tabular-nums",
+      render: (row) => (row.engagement_rate != null ? `${row.engagement_rate}%` : "—"),
+    },
+    textColumn("primary_content_type", "Content Type", (r) => r.primary_content_type),
+    textColumn("languages", "Languages", (r) => r.languages),
+    {
+      key: "management_status",
+      label: "Mgmt Status",
+      render: (row) => (
+        <Badge className={MGMT_COLORS[row.management_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {row.management_status || "—"}
+        </Badge>
+      ),
+    },
+    textColumn("interested_in_exclusive_mgmt", "Exclusive?", (r) => r.interested_in_exclusive_mgmt),
+    dateColumn("date_first_contacted", "First Contacted", (r) => r.date_first_contacted),
+    dateColumn("next_follow_up_date", "Next Follow-up", (r) => r.next_follow_up_date),
+    textColumn("outreach_outcome", "Outreach Outcome", (r) => r.outreach_outcome),
+    {
+      key: "contract_status",
+      label: "Contract Status",
+      render: (row) => (
+        <Badge className={CONTRACT_STATUS_COLORS[row.contract_status ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {row.contract_status || "—"}
+        </Badge>
+      ),
+    },
+    yesNoColumn("rate_card_received", "Rate Card", (r) => r.rate_card_received),
+    yesNoColumn("gst_available", "GST", (r) => r.gst_available),
+    yesNoColumn("payment_details_received", "Payment", (r) => r.payment_details_received),
+    {
+      key: "priority",
+      label: "Priority",
+      render: (row) => (
+        <Badge className={PRIORITY_COLORS[row.priority ?? ""] ?? "bg-muted text-muted-foreground"}>
+          {row.priority || "—"}
+        </Badge>
+      ),
+    },
+    textColumn("assigned_manager", "Manager", (r) => r.assigned_manager),
+    textColumn("notes", "Notes", (r) => r.notes, "max-w-[280px] truncate text-muted-foreground"),
+    {
+      key: "actions",
+      label: "Actions",
+      align: "right",
+      render: (row) =>
+        isAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label={`Actions for ${row.creator_name}`}>
+                <MoreVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="glass-strong">
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditing(row);
+                  setForm(creatorFormFromRow(row));
+                  setDialogOpen(true);
+                }}
+              >
+                <Pencil className="size-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => handleDelete(row)}>
+                <Trash2 className="size-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+    },
+  ];
+
+  const { ordered, all, hidden, moveColumn, toggleColumn, renameColumn, reset, canReset } =
+    useTableView(TABLE_KEY, columns);
+  const drag = useColumnDrag(moveColumn);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
@@ -208,14 +328,21 @@ function MasterDataInner() {
               className="w-full sm:w-72"
             />
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              Scroll right to see all columns
+              Drag column headers to reorder
             </span>
             {activeConditions.length > 0 && loaded && (
               <span className="hidden text-xs text-muted-foreground md:inline">
                 {filtered.length} of {rows.length} shown
               </span>
             )}
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <ColumnSettings
+              columns={all}
+              hidden={hidden}
+              onToggle={toggleColumn}
+              onRename={renameColumn}
+            />
+            <ResetColumnsButton onReset={reset} visible={canReset} />
               <CustomFilterPicker />
             </div>
           </div>
@@ -225,115 +352,38 @@ function MasterDataInner() {
             <Table className="min-w-max">
               <TableHeader className="sticky top-0 z-10 bg-card/60 backdrop-blur-xl">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Creator Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Instagram</TableHead>
-                  <TableHead>YouTube</TableHead>
-                  <TableHead>X (Twitter)</TableHead>
-                  <TableHead>Other Platforms</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>Niche</TableHead>
-                  <TableHead className="text-right">Followers (IG)</TableHead>
-                  <TableHead className="text-right">Followers (YT)</TableHead>
-                  <TableHead className="text-right">Total Reach</TableHead>
-                  <TableHead className="text-right">Engagement</TableHead>
-                  <TableHead>Content Type</TableHead>
-                  <TableHead>Languages</TableHead>
-                  <TableHead>Mgmt Status</TableHead>
-                  <TableHead>Exclusive?</TableHead>
-                  <TableHead>First Contacted</TableHead>
-                  <TableHead>Next Follow-up</TableHead>
-                  <TableHead>Outreach Outcome</TableHead>
-                  <TableHead>Contract Status</TableHead>
-                  <TableHead>Rate Card</TableHead>
-                  <TableHead>GST</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Manager</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="pr-6 text-right">Actions</TableHead>
+                  {ordered.map((col, i) => (
+                    <DraggableTableHead
+                      key={col.key}
+                      columnKey={col.key}
+                      drag={drag}
+                      className={cn(
+                        i === 0 && "pl-6",
+                        i === ordered.length - 1 && "pr-6",
+                        col.align === "right" && "text-right"
+                      )}
+                    >
+                      {col.label}
+                    </DraggableTableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((row) => (
                   <TableRow key={row.id} className="hover:bg-accent/40">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-2">
-                        <div className="grid size-7 shrink-0 place-items-center rounded-full bg-foreground/10 text-xs font-semibold">
-                          {row.creator_name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="whitespace-nowrap font-medium">{row.creator_name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.creator_type || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.instagram || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.youtube || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.x_twitter || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.other_platforms || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.email || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.phone_number || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.city || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.state || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.country || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.niche || "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtNum(row.followers_instagram)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtNum(row.followers_youtube)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{fmtNum(row.total_reach)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.engagement_rate != null ? `${row.engagement_rate}%` : "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.primary_content_type || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.languages || "—"}</TableCell>
-                    <TableCell>
-                      <Badge className={MGMT_COLORS[row.management_status ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {row.management_status || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {row.interested_in_exclusive_mgmt || "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDate(row.date_first_contacted)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDate(row.next_follow_up_date)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.outreach_outcome || "—"}</TableCell>
-                    <TableCell>
-                      <Badge className={CONTRACT_STATUS_COLORS[row.contract_status ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {row.contract_status || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{yesNo(row.rate_card_received)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{yesNo(row.gst_available)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{yesNo(row.payment_details_received)}</TableCell>
-                    <TableCell>
-                      <Badge className={PRIORITY_COLORS[row.priority ?? ""] ?? "bg-muted text-muted-foreground"}>
-                        {row.priority || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.assigned_manager || "—"}</TableCell>
-                    <TableCell className="max-w-[280px] truncate text-muted-foreground">{row.notes || "—"}</TableCell>
-                    <TableCell className="pr-6 text-right">
-                      {isAdmin && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label={`Actions for ${row.creator_name}`}>
-                              <MoreVertical className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="glass-strong">
-                            <DropdownMenuItem onClick={() => { setEditing(row); setForm(creatorFormFromRow(row)); setDialogOpen(true); }}>
-                              <Pencil className="size-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => handleDelete(row)}>
-                              <Trash2 className="size-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
+                    {ordered.map((col, i) => (
+                      <TableCell
+                        key={col.key}
+                        className={cn(
+                          col.cellClassName,
+                          i === 0 && "pl-6",
+                          i === ordered.length - 1 && "pr-6",
+                          col.align === "right" && "text-right"
+                        )}
+                      >
+                        {col.render(row)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>
