@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 
 
 const NAV = [
@@ -41,6 +42,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="text-lg font-bold tracking-tight">
             AniCRM
           </Link>
+        </div>
+
+        <div className="px-3 pt-4">
+          <WorkspaceSwitcher />
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
@@ -122,6 +127,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   );
                 })}
               </nav>
+              <div className="mt-6">
+                <WorkspaceSwitcher />
+              </div>
               <div className="mt-6 flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
                 <span className="text-sm text-muted-foreground">Profile</span>
                 <div className="flex items-center gap-2">

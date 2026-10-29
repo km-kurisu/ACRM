@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/server";
 import { ensureUserRow } from "@/lib/user-sync";
+import { DEFAULT_WORKSPACE_ID } from "@/lib/presence";
 
 export type AuditAction = "create" | "update" | "delete" | "import";
 
@@ -21,6 +22,7 @@ export type AuditLogInput = {
   entityType: AuditEntity;
   entityId?: string | null;
   entityLabel?: string | null;
+  workspaceId?: string;
   changes?: Record<string, unknown>;
 };
 
@@ -69,6 +71,7 @@ export async function writeAuditLog(input: AuditLogInput): Promise<void> {
       entity_type: input.entityType,
       entity_id: input.entityId ?? null,
       entity_label: input.entityLabel ?? null,
+      workspace_id: input.workspaceId ?? DEFAULT_WORKSPACE_ID,
       changes: input.changes ?? {},
     });
 

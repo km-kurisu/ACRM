@@ -194,9 +194,76 @@ create table if not exists public.workspaces (
     created_at timestamp with time zone not null default timezone('utc'::text, now())
 );
 
--- Seed default workspace
+-- Seed default and Writers Den workspaces
 insert into public.workspaces (id, name) values
-    ('00000000-0000-0000-0000-000000000001', 'default')
+    ('00000000-0000-0000-0000-000000000001', 'Default'),
+    ('00000000-0000-0000-0000-000000000002', 'Writers Den')
+on conflict do nothing;
+
+-- ------------------------------------------------------------
+-- workspace_members — users can belong to multiple workspaces
+-- Users with no rows fall back to the Default workspace.
+-- ------------------------------------------------------------
+create table if not exists public.workspace_members (
+    user_id text not null references public.users(id) on delete cascade,
+    workspace_id uuid not null references public.workspaces(id) on delete cascade,
+    created_at timestamp with time zone not null default timezone('utc'::text, now()),
+    primary key (user_id, workspace_id)
+);
+
+alter table public.workspace_members enable row level security;
+
+drop policy if exists "workspace_members select own or admin" on public.workspace_members;
+create policy "workspace_members select own or admin" on public.workspace_members
+    for select using (
+        auth.uid()::text = user_id or
+        (auth.jwt() -> 'metadata' ->> 'role') = 'admin'
+    );
+
+create index if not exists idx_workspace_members_workspace
+    on public.workspace_members (workspace_id);
+
+-- ------------------------------------------------------------
+-- Scope all workspace content tables to a workspace.
+-- Existing rows belong to the Default workspace.
+-- ------------------------------------------------------------
+do $$
+declare
+    t text;
+    default_workspace constant text := '00000000-0000-0000-0000-000000000001';
+begin
+    foreach t in array array['creators', 'companies', 'deals', 'outreach', 'contracts'] loop
+        execute format('alter table public.%I add column if not exists workspace_id uuid', t);
+        execute format('update public.%I set workspace_id = %L where workspace_id is null', t, default_workspace);
+        execute format('alter table public.%I alter column workspace_id set default %L', t, default_workspace);
+        execute format('alter table public.%I alter column workspace_id set not null', t);
+        if not exists (select 1 from pg_constraint where conname = t || '_workspace_id_fkey') then
+            execute format(
+                'alter table public.%I add constraint %I foreign key (workspace_id) references public.workspaces(id) on delete cascade',
+                t,
+                t || '_workspace_id_fkey'
+            );
+        end if;
+    end loop;
+end $$;
+
+create index if not exists idx_creators_workspace on public.creators (workspace_id, created_at desc);
+create index if not exists idx_companies_workspace on public.companies (workspace_id, created_at desc);
+create index if not exists idx_deals_workspace on public.deals (workspace_id, created_at desc);
+create index if not exists idx_outreach_workspace on public.outreach (workspace_id, created_at desc);
+create index if not exists idx_contracts_workspace on public.contracts (workspace_id, created_at desc);
+
+-- Preserve access to migrated data in Default, and give existing admins
+-- access to the additional Writers Den workspace.
+insert into public.workspace_members (user_id, workspace_id)
+select id, '00000000-0000-0000-0000-000000000001'
+from public.users
+on conflict do nothing;
+
+insert into public.workspace_members (user_id, workspace_id)
+select id, '00000000-0000-0000-0000-000000000002'
+from public.users
+where role = 'admin'
 on conflict do nothing;
 
 -- ------------------------------------------------------------
@@ -395,6 +462,7 @@ create table if not exists public.custom_filters (
     name text not null,
     visibility text not null default 'personal' check (visibility in ('org', 'personal')),
     conditions jsonb not null default '[]',
+    workspace_id uuid not null default '00000000-0000-0000-0000-000000000001' references public.workspaces(id) on delete cascade,
     created_by text not null references public.users(id) on delete cascade,
     created_at timestamp with time zone not null default timezone('utc'::text, now()),
     updated_at timestamp with time zone not null default timezone('utc'::text, now())
@@ -435,6 +503,7 @@ create policy "custom_filters delete owner-or-admin" on public.custom_filters
     );
 
 create index if not exists idx_custom_filters_created_by on public.custom_filters (created_by);
+create index if not exists idx_custom_filters_workspace on public.custom_filters (workspace_id, created_at desc);
 
 -- ------------------------------------------------------------
 -- companies — outreach tracking columns
@@ -643,6 +712,7 @@ create table if not exists public.audit_logs (
     entity_id text,
     entity_label text,
     changes jsonb not null default '{}'::jsonb,
+    workspace_id uuid not null default '00000000-0000-0000-0000-000000000001' references public.workspaces(id) on delete cascade,
     created_at timestamp with time zone not null default timezone('utc'::text, now())
 );
 
@@ -658,3 +728,4 @@ create policy "audit_logs select admin" on public.audit_logs
 create index if not exists idx_audit_logs_created_at on public.audit_logs (created_at desc);
 create index if not exists idx_audit_logs_entity_type on public.audit_logs (entity_type, created_at desc);
 create index if not exists idx_audit_logs_actor_id on public.audit_logs (actor_id, created_at desc);
+create index if not exists idx_audit_logs_workspace on public.audit_logs (workspace_id, created_at desc);

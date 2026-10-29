@@ -19,10 +19,12 @@ import {
   type FilterCondition,
   type FilterVisibility,
 } from "@/lib/custom-filters";
-import { DEFAULT_WORKSPACE_ID, type PresenceStatus } from "@/lib/presence";
+import type { PresenceStatus } from "@/lib/presence";
 import type { TableViewPrefs } from "@/lib/table-view";
 import { CREATOR_COLUMNS } from "@/lib/creator-spreadsheet";
 import { diffValues, writeAuditLog } from "@/lib/audit";
+import { getActiveWorkspaceId, listWorkspacesForUser, WORKSPACE_COOKIE } from "@/lib/workspace-server";
+import { cookies } from "next/headers";
 
 function fail(error: { message?: string } | null): never {
   throw new Error(error?.message || "Database error");
@@ -38,6 +40,37 @@ async function creatorName(creatorId: string | null | undefined): Promise<string
   if (!creatorId) return null;
   const { data } = await db.from("creators").select("creator_name").eq("id", creatorId).maybeSingle();
   return (data as { creator_name?: string } | null)?.creator_name ?? null;
+}
+
+async function assertCreatorsInWorkspace(creatorIds: string[], workspaceId: string) {
+  const unique = [...new Set(creatorIds)];
+  const found = await rows<{ id: string }>(
+    db.from("creators").select("id").eq("workspace_id", workspaceId).in("id", unique)
+  );
+  if (found.length !== unique.length) {
+    throw new Error("One or more selected creators are not in this workspace");
+  }
+}
+
+async function assertCreatorInWorkspace(creatorId: string | null | undefined, workspaceId: string) {
+  if (!creatorId) throw new Error("Please select a creator");
+  const { data } = await db
+    .from("creators")
+    .select("id")
+    .eq("id", creatorId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!data) throw new Error("Selected creator is not in this workspace");
+}
+
+async function assertCompanyInWorkspace(companyId: string, workspaceId: string) {
+  const { data } = await db
+    .from("companies")
+    .select("id")
+    .eq("id", companyId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!data) throw new Error("Selected company is not in this workspace");
 }
 
 function groupByCreator<T extends { creator_id: string | null }>(items: T[]): Map<string, T[]> {
@@ -93,21 +126,42 @@ export type MasterDataRow = Creator & {
 // ---------- Creators ----------
 
 export async function listCreators(): Promise<Creator[]> {
-  return rows(db.from("creators").select("*").order("created_at", { ascending: false }));
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  return rows(
+    db
+      .from("creators")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
+  );
 }
 
 export async function getCreator(id: string): Promise<Creator | null> {
-  const { data, error } = await db.from("creators").select("*").eq("id", id).single();
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  const { data, error } = await db
+    .from("creators")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .single();
   if (error) fail(error);
   return data as Creator | null;
 }
 
 export async function createCreator(input: Partial<Creator>) {
   const actorId = await requireAdmin();
-  const { data, error } = await db.from("creators").insert([input]).select("id").single();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data, error } = await db
+    .from("creators")
+    .insert([{ ...input, workspace_id: workspaceId }])
+    .select("id")
+    .single();
   if (error) fail(error);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "create",
     entityType: "creator",
     entityId: (data as { id: string }).id,
@@ -124,12 +178,13 @@ const CREATOR_IMPORT_BATCH = 500;
 
 export async function importCreators(input: Partial<Creator>[]): Promise<number> {
   const actorId = await requireAdmin();
+  const workspaceId = await getActiveWorkspaceId(actorId);
   if (!Array.isArray(input) || input.length === 0) {
     throw new Error("No rows were provided to import");
   }
 
   const cleaned = input.map((row, index) => {
-    const record: Record<string, unknown> = {};
+    const record: Record<string, unknown> = { workspace_id: workspaceId };
     for (const [key, value] of Object.entries(row)) {
       if (CREATOR_IMPORT_KEYS.has(key)) record[key] = value;
     }
@@ -150,6 +205,7 @@ export async function importCreators(input: Partial<Creator>[]): Promise<number>
 
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "import",
     entityType: "creator",
     entityLabel: `${cleaned.length} creator${cleaned.length === 1 ? "" : "s"}`,
@@ -161,12 +217,23 @@ export async function importCreators(input: Partial<Creator>[]): Promise<number>
 
 export async function updateCreator(id: string, input: Partial<Creator>) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("creators").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("creators")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("creators").update(input).eq("id", id);
+  const { error } = await db
+    .from("creators")
+    .update(input)
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "update",
     entityType: "creator",
     entityId: id,
@@ -178,12 +245,23 @@ export async function updateCreator(id: string, input: Partial<Creator>) {
 
 export async function deleteCreator(id: string) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("creators").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("creators")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("creators").delete().eq("id", id);
+  const { error } = await db
+    .from("creators")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "delete",
     entityType: "creator",
     entityId: id,
@@ -196,8 +274,14 @@ export async function deleteCreator(id: string) {
 // ---------- Companies ----------
 
 export async function listCompanies(): Promise<CompanyWithContacts[]> {
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
   return rows<CompanyWithContacts>(
-    db.from("companies").select("*, company_contacts(*)").order("created_at", { ascending: false })
+    db
+      .from("companies")
+      .select("*, company_contacts(*)")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
   );
 }
 
@@ -229,13 +313,19 @@ async function replaceContacts(companyId: string, contacts: CompanyContactInput[
 
 export async function createCompany(input: CompanyInput) {
   const actorId = await requireAdmin();
+  const workspaceId = await getActiveWorkspaceId(actorId);
   const { contacts, ...company } = input;
-  const { data, error } = await db.from("companies").insert([company]).select("id").single();
+  const { data, error } = await db
+    .from("companies")
+    .insert([{ ...company, workspace_id: workspaceId }])
+    .select("id")
+    .single();
   if (error) fail(error);
   const companyId = (data as { id: string }).id;
   await replaceContacts(companyId, contacts ?? []);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "create",
     entityType: "company",
     entityId: companyId,
@@ -247,14 +337,25 @@ export async function createCompany(input: CompanyInput) {
 
 export async function updateCompany(id: string, input: CompanyInput) {
   const actorId = await requireAdmin();
+  const workspaceId = await getActiveWorkspaceId(actorId);
   const { contacts, ...company } = input;
-  const { data: before, error: fetchError } = await db.from("companies").select("*").eq("id", id).maybeSingle();
+  const { data: before, error: fetchError } = await db
+    .from("companies")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("companies").update(company).eq("id", id);
+  const { error } = await db
+    .from("companies")
+    .update(company)
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   await replaceContacts(id, contacts ?? []);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "update",
     entityType: "company",
     entityId: id,
@@ -269,18 +370,30 @@ export async function updateCompany(id: string, input: CompanyInput) {
 
 export async function deleteCompany(id: string) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("companies").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("companies")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
   const { count, error } = await db
     .from("deals")
     .select("id", { count: "exact", head: true })
-    .eq("company_id", id);
+    .eq("company_id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   if ((count ?? 0) > 0) throw new Error(`Cannot delete this company — ${count} deal(s) still reference it`);
-  const { error: deleteError } = await db.from("companies").delete().eq("id", id);
+  const { error: deleteError } = await db
+    .from("companies")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (deleteError) fail(deleteError);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "delete",
     entityType: "company",
     entityId: id,
@@ -302,10 +415,13 @@ function withCreators({ deal_creators, ...deal }: RawDealRow): DealWithRefs {
 }
 
 export async function listDeals(): Promise<DealWithRefs[]> {
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
   const data = await rows<RawDealRow>(
     db
       .from("deals")
       .select("*, companies(id, name), deal_creators(creators(id, creator_name))")
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
   );
   return data.map((d) => {
@@ -316,10 +432,13 @@ export async function listDeals(): Promise<DealWithRefs[]> {
 }
 
 export async function listDealsByCreator(creatorId: string): Promise<Deal[]> {
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
   return rows(
     db
       .from("deals")
       .select("*, deal_creators!inner(creator_id)")
+      .eq("workspace_id", workspaceId)
       .eq("deal_creators.creator_id", creatorId)
       .order("created_at", { ascending: false })
   );
@@ -327,9 +446,16 @@ export async function listDealsByCreator(creatorId: string): Promise<Deal[]> {
 
 export async function createDeal(input: Partial<Deal>, creatorIds: string[]) {
   const actorId = await requireAdmin();
+  const workspaceId = await getActiveWorkspaceId(actorId);
   if (creatorIds.length === 0) throw new Error("Please select at least one creator");
+  await assertCreatorsInWorkspace(creatorIds, workspaceId);
+  if (input.company_id) await assertCompanyInWorkspace(input.company_id, workspaceId);
 
-  const { data, error } = await db.from("deals").insert([input]).select("id").single();
+  const { data, error } = await db
+    .from("deals")
+    .insert([{ ...input, workspace_id: workspaceId }])
+    .select("id")
+    .single();
   if (error) fail(error);
 
   const { error: linkError } = await db
@@ -339,6 +465,7 @@ export async function createDeal(input: Partial<Deal>, creatorIds: string[]) {
 
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "create",
     entityType: "deal",
     entityId: (data as { id: string }).id,
@@ -350,9 +477,23 @@ export async function createDeal(input: Partial<Deal>, creatorIds: string[]) {
 
 export async function updateDeal(id: string, input: Partial<Deal>, creatorIds?: string[]) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("deals").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("deals")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("deals").update(input).eq("id", id);
+  if (!before) throw new Error("Deal not found");
+  if (creatorIds) await assertCreatorsInWorkspace(creatorIds, workspaceId);
+  if (input.company_id) await assertCompanyInWorkspace(input.company_id, workspaceId);
+
+  const { error } = await db
+    .from("deals")
+    .update(input)
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
 
   if (creatorIds) {
@@ -367,6 +508,7 @@ export async function updateDeal(id: string, input: Partial<Deal>, creatorIds?: 
 
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "update",
     entityType: "deal",
     entityId: id,
@@ -381,12 +523,23 @@ export async function updateDeal(id: string, input: Partial<Deal>, creatorIds?: 
 
 export async function deleteDeal(id: string) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("deals").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("deals")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("deals").delete().eq("id", id);
+  const { error } = await db
+    .from("deals")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "delete",
     entityType: "deal",
     entityId: id,
@@ -399,20 +552,44 @@ export async function deleteDeal(id: string) {
 // ---------- Outreach ----------
 
 export async function listOutreach(): Promise<OutreachWithCreator[]> {
-  return rows(db.from("outreach").select("*, creators(id, creator_name)").order("created_at", { ascending: false }));
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  return rows(
+    db
+      .from("outreach")
+      .select("*, creators(id, creator_name)")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
+  );
 }
 
 export async function listOutreachByCreator(creatorId: string): Promise<Outreach[]> {
-  return rows(db.from("outreach").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false }));
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  return rows(
+    db
+      .from("outreach")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("creator_id", creatorId)
+      .order("created_at", { ascending: false })
+  );
 }
 
 export async function createOutreach(input: Partial<Outreach>) {
   const actorId = await requireAdmin();
-  const { data, error } = await db.from("outreach").insert([input]).select("id").single();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  await assertCreatorInWorkspace(input.creator_id, workspaceId);
+  const { data, error } = await db
+    .from("outreach")
+    .insert([{ ...input, workspace_id: workspaceId }])
+    .select("id")
+    .single();
   if (error) fail(error);
   const name = await creatorName(input.creator_id);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "create",
     entityType: "outreach",
     entityId: (data as { id: string }).id,
@@ -424,13 +601,26 @@ export async function createOutreach(input: Partial<Outreach>) {
 
 export async function updateOutreach(id: string, input: Partial<Outreach>) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("outreach").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("outreach")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("outreach").update(input).eq("id", id);
+  if (!before) throw new Error("Outreach record not found");
+  if (input.creator_id) await assertCreatorInWorkspace(input.creator_id, workspaceId);
+  const { error } = await db
+    .from("outreach")
+    .update(input)
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   const name = await creatorName(input.creator_id ?? (before as Outreach | null)?.creator_id);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "update",
     entityType: "outreach",
     entityId: id,
@@ -442,13 +632,24 @@ export async function updateOutreach(id: string, input: Partial<Outreach>) {
 
 export async function deleteOutreach(id: string) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("outreach").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("outreach")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("outreach").delete().eq("id", id);
+  const { error } = await db
+    .from("outreach")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   const name = await creatorName((before as Outreach | null)?.creator_id);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "delete",
     entityType: "outreach",
     entityId: id,
@@ -461,20 +662,44 @@ export async function deleteOutreach(id: string) {
 // ---------- Contracts ----------
 
 export async function listContracts(): Promise<ContractWithCreator[]> {
-  return rows(db.from("contracts").select("*, creators(id, creator_name)").order("created_at", { ascending: false }));
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  return rows(
+    db
+      .from("contracts")
+      .select("*, creators(id, creator_name)")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
+  );
 }
 
 export async function listContractsByCreator(creatorId: string): Promise<Contract[]> {
-  return rows(db.from("contracts").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false }));
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  return rows(
+    db
+      .from("contracts")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("creator_id", creatorId)
+      .order("created_at", { ascending: false })
+  );
 }
 
 export async function createContract(input: Partial<Contract>) {
   const actorId = await requireAdmin();
-  const { data, error } = await db.from("contracts").insert([input]).select("id").single();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  await assertCreatorInWorkspace(input.creator_id, workspaceId);
+  const { data, error } = await db
+    .from("contracts")
+    .insert([{ ...input, workspace_id: workspaceId }])
+    .select("id")
+    .single();
   if (error) fail(error);
   const name = await creatorName(input.creator_id);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "create",
     entityType: "contract",
     entityId: (data as { id: string }).id,
@@ -486,13 +711,26 @@ export async function createContract(input: Partial<Contract>) {
 
 export async function updateContract(id: string, input: Partial<Contract>) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("contracts").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("contracts")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("contracts").update(input).eq("id", id);
+  if (!before) throw new Error("Contract not found");
+  if (input.creator_id) await assertCreatorInWorkspace(input.creator_id, workspaceId);
+  const { error } = await db
+    .from("contracts")
+    .update(input)
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   const name = await creatorName(input.creator_id ?? (before as Contract | null)?.creator_id);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "update",
     entityType: "contract",
     entityId: id,
@@ -504,13 +742,24 @@ export async function updateContract(id: string, input: Partial<Contract>) {
 
 export async function deleteContract(id: string) {
   const actorId = await requireAdmin();
-  const { data: before, error: fetchError } = await db.from("contracts").select("*").eq("id", id).maybeSingle();
+  const workspaceId = await getActiveWorkspaceId(actorId);
+  const { data: before, error: fetchError } = await db
+    .from("contracts")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
   if (fetchError) fail(fetchError);
-  const { error } = await db.from("contracts").delete().eq("id", id);
+  const { error } = await db
+    .from("contracts")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   const name = await creatorName((before as Contract | null)?.creator_id);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "delete",
     entityType: "contract",
     entityId: id,
@@ -523,9 +772,21 @@ export async function deleteContract(id: string) {
 // ---------- Master Data ----------
 
 export async function listMasterData(): Promise<MasterDataRow[]> {
-  const creators = await rows<Creator>(db.from("creators").select("*").order("created_at", { ascending: false }));
-  const outreach = await rows<OutreachRow>(db.from("outreach").select(OUTREACH_COLUMNS));
-  const contracts = await rows<ContractRow>(db.from("contracts").select("creator_id, contract_status, created_at"));
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  const creators = await rows<Creator>(
+    db
+      .from("creators")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
+  );
+  const outreach = await rows<OutreachRow>(
+    db.from("outreach").select(OUTREACH_COLUMNS).eq("workspace_id", workspaceId)
+  );
+  const contracts = await rows<ContractRow>(
+    db.from("contracts").select("creator_id, contract_status, created_at").eq("workspace_id", workspaceId)
+  );
 
   const outreachByCreator = groupByCreator(outreach);
   const contractsByCreator = groupByCreator(contracts);
@@ -580,11 +841,22 @@ function platformUrl(platform: string, handle: string): string | null {
 }
 
 export async function listPages(): Promise<CreatorPageRow[]> {
-  const creators = await rows<Creator>(db.from("creators").select("*").order("creator_name"));
-  const deals = await rows<Pick<Deal, "id" | "deal_value">>(db.from("deals").select("id, deal_value"));
-  const dealCreators = await rows<{ deal_id: string; creator_id: string }>(
-    db.from("deal_creators").select("deal_id, creator_id")
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  const creators = await rows<Creator>(
+    db.from("creators").select("*").eq("workspace_id", workspaceId).order("creator_name")
   );
+  const deals = await rows<Pick<Deal, "id" | "deal_value">>(
+    db.from("deals").select("id, deal_value").eq("workspace_id", workspaceId)
+  );
+  const dealCreators = deals.length
+    ? await rows<{ deal_id: string; creator_id: string }>(
+        db
+          .from("deal_creators")
+          .select("deal_id, creator_id")
+          .in("deal_id", deals.map((deal) => deal.id))
+      )
+    : [];
 
   const dealValueById = new Map(deals.map((d) => [d.id, Number(d.deal_value || 0)]));
   const valueByCreator = new Map<string, number>();
@@ -638,25 +910,42 @@ const PIPELINE_ORDER = ["Prospect", "Contacted", "Negotiating", "Signed", "Rejec
 const DEAL_STATUS_ORDER = ["Pitched", "Confirmed", "In Progress", "Completed", "Cancelled"];
 
 export async function getDashboardOverview(filter?: FilterCondition[]): Promise<DashboardOverview> {
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
   const scoped = scopeConditions(filter ?? [], "all");
   const active = scoped.length > 0 ? scoped : null;
   const creators = active
-    ? await rows<Creator>(db.from("creators").select("*"))
+    ? await rows<Creator>(db.from("creators").select("*").eq("workspace_id", workspaceId))
     : await rows<Creator>(
-        db.from("creators").select("id, creator_name, followers_instagram, followers_youtube, engagement_rate")
+        db
+          .from("creators")
+          .select("id, creator_name, followers_instagram, followers_youtube, engagement_rate")
+          .eq("workspace_id", workspaceId)
       );
   const matchingIds = active
     ? new Set(creators.filter(c => matchesFilter(c as unknown as Record<string, unknown>, active)).map(c => c.id))
     : null;
   const included = (id: string) => !matchingIds || matchingIds.has(id);
-  const outreach = await rows<OutreachRow>(db.from("outreach").select(OUTREACH_COLUMNS));
-  const contracts = await rows<ContractRow>(db.from("contracts").select("creator_id, contract_status, created_at"));
+  const outreach = await rows<OutreachRow>(
+    db.from("outreach").select(OUTREACH_COLUMNS).eq("workspace_id", workspaceId)
+  );
+  const contracts = await rows<ContractRow>(
+    db.from("contracts").select("creator_id, contract_status, created_at").eq("workspace_id", workspaceId)
+  );
   const deals = await rows<Pick<Deal, "id" | "deal_value" | "agency_commission" | "campaign_status">>(
-    db.from("deals").select("id, deal_value, agency_commission, campaign_status")
+    db
+      .from("deals")
+      .select("id, deal_value, agency_commission, campaign_status")
+      .eq("workspace_id", workspaceId)
   );
-  const dealCreators = await rows<{ deal_id: string; creator_id: string }>(
-    db.from("deal_creators").select("deal_id, creator_id")
-  );
+  const dealCreators = deals.length
+    ? await rows<{ deal_id: string; creator_id: string }>(
+        db
+          .from("deal_creators")
+          .select("deal_id, creator_id")
+          .in("deal_id", deals.map((deal) => deal.id))
+      )
+    : [];
 
   const outreachByCreator = groupByCreator(outreach);
   const contractsByCreator = groupByCreator(contracts);
@@ -814,7 +1103,8 @@ function joinMeta(parts: (string | null | undefined)[]): string | null {
 }
 
 export async function globalSearch(rawQuery: string): Promise<GlobalSearchResponse> {
-  await requireUser();
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
 
   const query = rawQuery.trim();
   if (query.length < 2) return { query, groups: [], total: 0 };
@@ -841,6 +1131,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
       db
         .from("creators")
         .select("id, creator_name, email, instagram, youtube, niche")
+        .eq("workspace_id", workspaceId)
         .or(creatorOr)
         .order("creator_name")
         .limit(6)
@@ -849,6 +1140,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
       db
         .from("companies")
         .select("id, name, domain, industry")
+        .eq("workspace_id", workspaceId)
         .or(`name.ilike.${pattern},domain.ilike.${pattern},industry.ilike.${pattern}`)
         .order("name")
         .limit(5)
@@ -857,6 +1149,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
       db
         .from("deals")
         .select("id, campaign, campaign_status, companies(id, name)")
+        .eq("workspace_id", workspaceId)
         .or(`campaign.ilike.${pattern},notes.ilike.${pattern}`)
         .order("created_at", { ascending: false })
         .limit(5)
@@ -865,6 +1158,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
       db
         .from("contracts")
         .select("id, creator_id, contract_type, contract_status, creators(id, creator_name)")
+        .eq("workspace_id", workspaceId)
         .or(`contract_type.ilike.${pattern},contract_status.ilike.${pattern},notes.ilike.${pattern}`)
         .order("created_at", { ascending: false })
         .limit(5)
@@ -873,6 +1167,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
       db
         .from("outreach")
         .select("id, creator_id, contact_method, current_status, creators(id, creator_name)")
+        .eq("workspace_id", workspaceId)
         .or(`contact_method.ilike.${pattern},current_status.ilike.${pattern},notes.ilike.${pattern}`)
         .order("created_at", { ascending: false })
         .limit(5)
@@ -890,6 +1185,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
         db
           .from("deals")
           .select("id, campaign, campaign_status, companies(id, name), deal_creators!inner(creator_id)")
+          .eq("workspace_id", workspaceId)
           .in("deal_creators.creator_id", creatorIds)
           .order("created_at", { ascending: false })
           .limit(5)
@@ -898,6 +1194,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
         db
           .from("contracts")
           .select("id, creator_id, contract_type, contract_status, creators(id, creator_name)")
+          .eq("workspace_id", workspaceId)
           .in("creator_id", creatorIds)
           .order("created_at", { ascending: false })
           .limit(5)
@@ -906,6 +1203,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchRespon
         db
           .from("outreach")
           .select("id, creator_id, contact_method, current_status, creators(id, creator_name)")
+          .eq("workspace_id", workspaceId)
           .in("creator_id", creatorIds)
           .order("created_at", { ascending: false })
           .limit(5)
@@ -1112,13 +1410,14 @@ export async function deleteDropdownOption(fieldKey: string, value: string) {
 
 export async function setPresenceStatus(status: PresenceStatus) {
   const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
   await ensureUserRow(userId);
 
   const { error } = await db
     .from("user_status")
     .upsert({
       user_id: userId,
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      workspace_id: workspaceId,
       status_override: status,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,workspace_id" });
@@ -1134,8 +1433,73 @@ export type SettingsRole = "admin" | "member" | "viewer";
 export type WorkspaceInfo = { id: string; name: string };
 
 export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
-  await requireUser();
-  return rows(db.from("workspaces").select("id, name").order("created_at"));
+  const userId = await requireUser();
+  let workspaces: WorkspaceInfo[];
+  try {
+    await requireAdmin();
+    workspaces = await rows<WorkspaceInfo>(
+      db.from("workspaces").select("id, name").order("created_at")
+    );
+    if (workspaces.length > 0) {
+      const { error } = await db.from("workspace_members").upsert(
+        workspaces.map((workspace) => ({ user_id: userId, workspace_id: workspace.id })),
+        { onConflict: "user_id,workspace_id" }
+      );
+      if (error) fail(error);
+    }
+  } catch {
+    workspaces = await listWorkspacesForUser(userId);
+  }
+  const activeId = await getActiveWorkspaceId(userId);
+  return [
+    ...workspaces.filter((workspace) => workspace.id === activeId),
+    ...workspaces.filter((workspace) => workspace.id !== activeId),
+  ];
+}
+
+export async function createWorkspace(name: string): Promise<WorkspaceInfo> {
+  const actorId = await requireAdmin();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Workspace name cannot be empty");
+
+  const { data, error } = await db
+    .from("workspaces")
+    .insert({ name: trimmed })
+    .select("id, name")
+    .single();
+  if (error) fail(error);
+
+  const { error: membershipError } = await db
+    .from("workspace_members")
+    .insert({ user_id: actorId, workspace_id: data.id });
+  if (membershipError) fail(membershipError);
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "workspace",
+    entityId: data.id,
+    entityLabel: data.name,
+    changes: { created: data },
+  });
+  revalidatePath("/settings");
+  return data as WorkspaceInfo;
+}
+
+export async function setActiveWorkspace(workspaceId: string) {
+  const userId = await requireUser();
+  const workspaces = await listWorkspacesForUser(userId);
+  if (!workspaces.some((workspace) => workspace.id === workspaceId)) {
+    throw new Error("You do not have access to that workspace");
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set(WORKSPACE_COOKIE, workspaceId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+  revalidateAll();
 }
 
 export async function updateWorkspaceName(workspaceId: string, name: string) {
@@ -1155,6 +1519,11 @@ export async function updateWorkspaceName(workspaceId: string, name: string) {
     .update({ name: trimmed })
     .eq("id", workspaceId);
   if (error) fail(error);
+
+  const { error: membershipError } = await db
+    .from("workspace_members")
+    .upsert({ user_id: actorId, workspace_id: workspaceId }, { onConflict: "user_id,workspace_id" });
+  if (membershipError) fail(membershipError);
 
   await writeAuditLog({
     actorId,
@@ -1226,12 +1595,16 @@ export type AuditLogPage = {
 };
 
 export async function listAuditLogs(filters: AuditLogFilters = {}): Promise<AuditLogPage> {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const workspaceId = await getActiveWorkspaceId(actorId);
 
   const page = Math.max(1, Math.floor(filters.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(filters.pageSize ?? 30)));
 
-  let query = db.from("audit_logs").select("*", { count: "exact" });
+  let query = db
+    .from("audit_logs")
+    .select("*", { count: "exact" })
+    .eq("workspace_id", workspaceId);
 
   if (filters.action) query = query.eq("action", filters.action);
   if (filters.entityType) query = query.eq("entity_type", filters.entityType);
@@ -1270,6 +1643,7 @@ export type NotificationPreferences = {
 
 export async function getNotificationPreferences(): Promise<NotificationPreferences> {
   const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
 
   const { data, error } = await db
     .from("user_preferences")
@@ -1277,7 +1651,7 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
       "notify_deal_updates, notify_contract_renewals, notify_outreach_followups, notify_weekly_digest"
     )
     .eq("user_id", userId)
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (error) fail(error);
 
@@ -1291,13 +1665,14 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
 
 export async function updateNotificationPreferences(input: NotificationPreferences) {
   const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
   await ensureUserRow(userId);
 
   const { error } = await db
     .from("user_preferences")
     .upsert({
       user_id: userId,
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      workspace_id: workspaceId,
       ...input,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,workspace_id" });
@@ -1339,8 +1714,13 @@ async function assertCanEditFilter(row: CustomFilterRecord): Promise<string> {
 
 export async function listCustomFilters(): Promise<CustomFilter[]> {
   const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
   const data = await rows<CustomFilterRecord>(
-    db.from("custom_filters").select("*").order("created_at", { ascending: false })
+    db
+      .from("custom_filters")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
   );
   return data
     .map(normalizeFilter)
@@ -1358,6 +1738,7 @@ export async function createCustomFilter(input: {
   const validationError = validateConditions(input.conditions);
   if (validationError) throw new Error(validationError);
   if (input.visibility === "org") await requireAdmin();
+  const workspaceId = await getActiveWorkspaceId(userId);
 
   await ensureUserRow(userId);
   const { data, error } = await db
@@ -1366,6 +1747,7 @@ export async function createCustomFilter(input: {
       name,
       visibility: input.visibility,
       conditions: input.conditions,
+      workspace_id: workspaceId,
       created_by: userId,
     })
     .select("id")
@@ -1373,6 +1755,7 @@ export async function createCustomFilter(input: {
   if (error) fail(error);
   await writeAuditLog({
     actorId: userId,
+    workspaceId,
     action: "create",
     entityType: "custom_filter",
     entityId: (data as { id: string }).id,
@@ -1390,7 +1773,14 @@ export async function updateCustomFilter(
   const validationError = validateConditions(input.conditions);
   if (validationError) throw new Error(validationError);
 
-  const { data, error: fetchError } = await db.from("custom_filters").select("*").eq("id", id).single();
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  const { data, error: fetchError } = await db
+    .from("custom_filters")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .single();
   if (fetchError || !data) throw new Error("Filter not found");
   const existing = data as CustomFilterRecord;
   const actorId = await assertCanEditFilter(existing);
@@ -1399,10 +1789,12 @@ export async function updateCustomFilter(
   const { error } = await db
     .from("custom_filters")
     .update({ name, visibility: input.visibility, conditions: input.conditions, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "update",
     entityType: "custom_filter",
     entityId: id,
@@ -1418,14 +1810,26 @@ export async function updateCustomFilter(
 }
 
 export async function deleteCustomFilter(id: string) {
-  const { data, error: fetchError } = await db.from("custom_filters").select("*").eq("id", id).single();
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  const { data, error: fetchError } = await db
+    .from("custom_filters")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .single();
   if (fetchError || !data) throw new Error("Filter not found");
   const existing = data as CustomFilterRecord;
   const actorId = await assertCanEditFilter(existing);
-  const { error } = await db.from("custom_filters").delete().eq("id", id);
+  const { error } = await db
+    .from("custom_filters")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
   if (error) fail(error);
   await writeAuditLog({
     actorId,
+    workspaceId,
     action: "delete",
     entityType: "custom_filter",
     entityId: id,

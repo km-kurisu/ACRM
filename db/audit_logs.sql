@@ -10,8 +10,31 @@ create table if not exists public.audit_logs (
     entity_id text,
     entity_label text,
     changes jsonb not null default '{}'::jsonb,
+    workspace_id uuid not null default '00000000-0000-0000-0000-000000000001' references public.workspaces(id) on delete cascade,
     created_at timestamp with time zone not null default timezone('utc'::text, now())
 );
+
+alter table public.audit_logs
+    add column if not exists workspace_id uuid;
+
+update public.audit_logs
+set workspace_id = '00000000-0000-0000-0000-000000000001'
+where workspace_id is null;
+
+alter table public.audit_logs
+    alter column workspace_id set default '00000000-0000-0000-0000-000000000001';
+
+alter table public.audit_logs
+    alter column workspace_id set not null;
+
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'audit_logs_workspace_id_fkey') then
+        alter table public.audit_logs
+            add constraint audit_logs_workspace_id_fkey
+            foreign key (workspace_id) references public.workspaces(id) on delete cascade;
+    end if;
+end $$;
 
 alter table public.audit_logs enable row level security;
 
@@ -25,3 +48,4 @@ create policy "audit_logs select admin" on public.audit_logs
 create index if not exists idx_audit_logs_created_at on public.audit_logs (created_at desc);
 create index if not exists idx_audit_logs_entity_type on public.audit_logs (entity_type, created_at desc);
 create index if not exists idx_audit_logs_actor_id on public.audit_logs (actor_id, created_at desc);
+create index if not exists idx_audit_logs_workspace on public.audit_logs (workspace_id, created_at desc);
