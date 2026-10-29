@@ -21,6 +21,8 @@ import {
 } from "@/lib/custom-filters";
 import { DEFAULT_WORKSPACE_ID, type PresenceStatus } from "@/lib/presence";
 import type { TableViewPrefs } from "@/lib/table-view";
+import { CREATOR_COLUMNS } from "@/lib/creator-spreadsheet";
+import { diffValues, writeAuditLog } from "@/lib/audit";
 
 function fail(error: { message?: string } | null): never {
   throw new Error(error?.message || "Database error");
@@ -30,6 +32,12 @@ async function rows<T>(query: PromiseLike<{ data: unknown; error: { message?: st
   const { data, error } = await query;
   if (error) fail(error);
   return (data ?? []) as T[];
+}
+
+async function creatorName(creatorId: string | null | undefined): Promise<string | null> {
+  if (!creatorId) return null;
+  const { data } = await db.from("creators").select("creator_name").eq("id", creatorId).maybeSingle();
+  return (data as { creator_name?: string } | null)?.creator_name ?? null;
 }
 
 function groupByCreator<T extends { creator_id: string | null }>(items: T[]): Map<string, T[]> {
@@ -95,23 +103,93 @@ export async function getCreator(id: string): Promise<Creator | null> {
 }
 
 export async function createCreator(input: Partial<Creator>) {
-  await requireAdmin();
-  const { error } = await db.from("creators").insert([input]);
+  const actorId = await requireAdmin();
+  const { data, error } = await db.from("creators").insert([input]).select("id").single();
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "creator",
+    entityId: (data as { id: string }).id,
+    entityLabel: input.creator_name ?? null,
+    changes: { created: input },
+  });
   revalidateAll();
 }
 
+const CREATOR_IMPORT_KEYS: Set<string> = new Set(
+  CREATOR_COLUMNS.filter((column) => column.importable).map((column) => column.key)
+);
+const CREATOR_IMPORT_BATCH = 500;
+
+export async function importCreators(input: Partial<Creator>[]): Promise<number> {
+  const actorId = await requireAdmin();
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new Error("No rows were provided to import");
+  }
+
+  const cleaned = input.map((row, index) => {
+    const record: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (CREATOR_IMPORT_KEYS.has(key)) record[key] = value;
+    }
+
+    const name = typeof record.creator_name === "string" ? record.creator_name.trim() : "";
+    if (!name) throw new Error(`Row ${index + 2} is missing a creator name`);
+    record.creator_name = name;
+    record.followers_instagram = Number(record.followers_instagram ?? 0) || 0;
+    record.followers_youtube = Number(record.followers_youtube ?? 0) || 0;
+    record.engagement_rate = Number(record.engagement_rate ?? 0) || 0;
+    return record;
+  });
+
+  for (let start = 0; start < cleaned.length; start += CREATOR_IMPORT_BATCH) {
+    const { error } = await db.from("creators").insert(cleaned.slice(start, start + CREATOR_IMPORT_BATCH));
+    if (error) fail(error);
+  }
+
+  await writeAuditLog({
+    actorId,
+    action: "import",
+    entityType: "creator",
+    entityLabel: `${cleaned.length} creator${cleaned.length === 1 ? "" : "s"}`,
+    changes: { count: cleaned.length },
+  });
+  revalidateAll();
+  return cleaned.length;
+}
+
 export async function updateCreator(id: string, input: Partial<Creator>) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("creators").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("creators").update(input).eq("id", id);
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "creator",
+    entityId: id,
+    entityLabel: input.creator_name ?? (before as Creator | null)?.creator_name ?? null,
+    changes: { changed: diffValues(before as Record<string, unknown> | null, input as Record<string, unknown>) },
+  });
   revalidateAll();
 }
 
 export async function deleteCreator(id: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("creators").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("creators").delete().eq("id", id);
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "delete",
+    entityType: "creator",
+    entityId: id,
+    entityLabel: (before as Creator | null)?.creator_name ?? null,
+    changes: { deleted: before ?? {} },
+  });
   revalidateAll();
 }
 
@@ -150,26 +228,49 @@ async function replaceContacts(companyId: string, contacts: CompanyContactInput[
 }
 
 export async function createCompany(input: CompanyInput) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
   const { contacts, ...company } = input;
   const { data, error } = await db.from("companies").insert([company]).select("id").single();
   if (error) fail(error);
   const companyId = (data as { id: string }).id;
   await replaceContacts(companyId, contacts ?? []);
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "company",
+    entityId: companyId,
+    entityLabel: company.name,
+    changes: { created: company, contacts_count: (contacts ?? []).length },
+  });
   revalidateAll();
 }
 
 export async function updateCompany(id: string, input: CompanyInput) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
   const { contacts, ...company } = input;
+  const { data: before, error: fetchError } = await db.from("companies").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("companies").update(company).eq("id", id);
   if (error) fail(error);
   await replaceContacts(id, contacts ?? []);
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "company",
+    entityId: id,
+    entityLabel: company.name,
+    changes: {
+      changed: diffValues(before as Record<string, unknown> | null, company as Record<string, unknown>),
+      contacts_count: (contacts ?? []).length,
+    },
+  });
   revalidateAll();
 }
 
 export async function deleteCompany(id: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("companies").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { count, error } = await db
     .from("deals")
     .select("id", { count: "exact", head: true })
@@ -178,6 +279,14 @@ export async function deleteCompany(id: string) {
   if ((count ?? 0) > 0) throw new Error(`Cannot delete this company — ${count} deal(s) still reference it`);
   const { error: deleteError } = await db.from("companies").delete().eq("id", id);
   if (deleteError) fail(deleteError);
+  await writeAuditLog({
+    actorId,
+    action: "delete",
+    entityType: "company",
+    entityId: id,
+    entityLabel: (before as Company | null)?.name ?? null,
+    changes: { deleted: before ?? {} },
+  });
   revalidateAll();
 }
 
@@ -217,7 +326,7 @@ export async function listDealsByCreator(creatorId: string): Promise<Deal[]> {
 }
 
 export async function createDeal(input: Partial<Deal>, creatorIds: string[]) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
   if (creatorIds.length === 0) throw new Error("Please select at least one creator");
 
   const { data, error } = await db.from("deals").insert([input]).select("id").single();
@@ -228,11 +337,21 @@ export async function createDeal(input: Partial<Deal>, creatorIds: string[]) {
     .insert(creatorIds.map((creator_id) => ({ deal_id: (data as { id: string }).id, creator_id })));
   if (linkError) fail(linkError);
 
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "deal",
+    entityId: (data as { id: string }).id,
+    entityLabel: input.campaign || "Untitled deal",
+    changes: { created: input, creator_ids: creatorIds },
+  });
   revalidateAll();
 }
 
 export async function updateDeal(id: string, input: Partial<Deal>, creatorIds?: string[]) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("deals").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("deals").update(input).eq("id", id);
   if (error) fail(error);
 
@@ -246,13 +365,34 @@ export async function updateDeal(id: string, input: Partial<Deal>, creatorIds?: 
     if (linkError) fail(linkError);
   }
 
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "deal",
+    entityId: id,
+    entityLabel: input.campaign ?? (before as Deal | null)?.campaign ?? "Untitled deal",
+    changes: {
+      changed: diffValues(before as Record<string, unknown> | null, input as Record<string, unknown>),
+      ...(creatorIds ? { creator_ids: creatorIds } : {}),
+    },
+  });
   revalidateAll();
 }
 
 export async function deleteDeal(id: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("deals").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("deals").delete().eq("id", id);
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "delete",
+    entityType: "deal",
+    entityId: id,
+    entityLabel: (before as Deal | null)?.campaign ?? "Untitled deal",
+    changes: { deleted: before ?? {} },
+  });
   revalidateAll();
 }
 
@@ -267,23 +407,54 @@ export async function listOutreachByCreator(creatorId: string): Promise<Outreach
 }
 
 export async function createOutreach(input: Partial<Outreach>) {
-  await requireAdmin();
-  const { error } = await db.from("outreach").insert([input]);
+  const actorId = await requireAdmin();
+  const { data, error } = await db.from("outreach").insert([input]).select("id").single();
   if (error) fail(error);
+  const name = await creatorName(input.creator_id);
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "outreach",
+    entityId: (data as { id: string }).id,
+    entityLabel: name ? `Outreach for ${name}` : "Outreach",
+    changes: { created: input },
+  });
   revalidateAll();
 }
 
 export async function updateOutreach(id: string, input: Partial<Outreach>) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("outreach").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("outreach").update(input).eq("id", id);
   if (error) fail(error);
+  const name = await creatorName(input.creator_id ?? (before as Outreach | null)?.creator_id);
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "outreach",
+    entityId: id,
+    entityLabel: name ? `Outreach for ${name}` : "Outreach",
+    changes: { changed: diffValues(before as Record<string, unknown> | null, input as Record<string, unknown>) },
+  });
   revalidateAll();
 }
 
 export async function deleteOutreach(id: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("outreach").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("outreach").delete().eq("id", id);
   if (error) fail(error);
+  const name = await creatorName((before as Outreach | null)?.creator_id);
+  await writeAuditLog({
+    actorId,
+    action: "delete",
+    entityType: "outreach",
+    entityId: id,
+    entityLabel: name ? `Outreach for ${name}` : "Outreach",
+    changes: { deleted: before ?? {} },
+  });
   revalidateAll();
 }
 
@@ -298,23 +469,54 @@ export async function listContractsByCreator(creatorId: string): Promise<Contrac
 }
 
 export async function createContract(input: Partial<Contract>) {
-  await requireAdmin();
-  const { error } = await db.from("contracts").insert([input]);
+  const actorId = await requireAdmin();
+  const { data, error } = await db.from("contracts").insert([input]).select("id").single();
   if (error) fail(error);
+  const name = await creatorName(input.creator_id);
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "contract",
+    entityId: (data as { id: string }).id,
+    entityLabel: name ? `Contract for ${name}` : "Contract",
+    changes: { created: input },
+  });
   revalidateAll();
 }
 
 export async function updateContract(id: string, input: Partial<Contract>) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("contracts").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("contracts").update(input).eq("id", id);
   if (error) fail(error);
+  const name = await creatorName(input.creator_id ?? (before as Contract | null)?.creator_id);
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "contract",
+    entityId: id,
+    entityLabel: name ? `Contract for ${name}` : "Contract",
+    changes: { changed: diffValues(before as Record<string, unknown> | null, input as Record<string, unknown>) },
+  });
   revalidateAll();
 }
 
 export async function deleteContract(id: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
+  const { data: before, error: fetchError } = await db.from("contracts").select("*").eq("id", id).maybeSingle();
+  if (fetchError) fail(fetchError);
   const { error } = await db.from("contracts").delete().eq("id", id);
   if (error) fail(error);
+  const name = await creatorName((before as Contract | null)?.creator_id);
+  await writeAuditLog({
+    actorId,
+    action: "delete",
+    entityType: "contract",
+    entityId: id,
+    entityLabel: name ? `Contract for ${name}` : "Contract",
+    changes: { deleted: before ?? {} },
+  });
   revalidateAll();
 }
 
@@ -550,6 +752,226 @@ export async function getDashboardOverview(filter?: FilterCondition[]): Promise<
   };
 }
 
+// ---------- Global search ----------
+
+export type GlobalSearchResultType = "creator" | "company" | "deal" | "contract" | "outreach";
+
+export type GlobalSearchItem = {
+  id: string;
+  type: GlobalSearchResultType;
+  title: string;
+  subtitle: string | null;
+  href: string;
+};
+
+export type GlobalSearchGroup = {
+  type: GlobalSearchResultType;
+  label: string;
+  items: GlobalSearchItem[];
+};
+
+export type GlobalSearchResponse = {
+  query: string;
+  groups: GlobalSearchGroup[];
+  total: number;
+};
+
+type CreatorSearchRow = Pick<Creator, "id" | "creator_name" | "email" | "instagram" | "youtube" | "niche">;
+type CompanySearchRow = Pick<Company, "id" | "name" | "domain" | "industry">;
+type DealSearchRow = {
+  id: string;
+  campaign: string | null;
+  campaign_status: string | null;
+  companies: CompanySummary | null;
+};
+type ContractSearchRow = {
+  id: string;
+  creator_id: string | null;
+  contract_type: string | null;
+  contract_status: string | null;
+  creators: CreatorSummary | null;
+};
+type OutreachSearchRow = {
+  id: string;
+  creator_id: string | null;
+  contact_method: string | null;
+  current_status: string | null;
+  creators: CreatorSummary | null;
+};
+
+function dedupeById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function joinMeta(parts: (string | null | undefined)[]): string | null {
+  const value = parts.filter((part): part is string => Boolean(part?.trim())).join(" · ");
+  return value || null;
+}
+
+export async function globalSearch(rawQuery: string): Promise<GlobalSearchResponse> {
+  await requireUser();
+
+  const query = rawQuery.trim();
+  if (query.length < 2) return { query, groups: [], total: 0 };
+
+  const safe = query.replace(/[,()%'"]/g, " ").replace(/\s+/g, " ").trim();
+  if (!safe) return { query, groups: [], total: 0 };
+  const pattern = `%${safe}%`;
+
+  const creatorOr = [
+    "creator_name",
+    "email",
+    "instagram",
+    "youtube",
+    "x_twitter",
+    "other_platforms",
+    "niche",
+    "assigned_manager",
+  ]
+    .map((field) => `${field}.ilike.${pattern}`)
+    .join(",");
+
+  const [creatorRows, companyRows, dealRows, contractRows, outreachRows] = await Promise.all([
+    rows<CreatorSearchRow>(
+      db
+        .from("creators")
+        .select("id, creator_name, email, instagram, youtube, niche")
+        .or(creatorOr)
+        .order("creator_name")
+        .limit(6)
+    ),
+    rows<CompanySearchRow>(
+      db
+        .from("companies")
+        .select("id, name, domain, industry")
+        .or(`name.ilike.${pattern},domain.ilike.${pattern},industry.ilike.${pattern}`)
+        .order("name")
+        .limit(5)
+    ),
+    rows<DealSearchRow>(
+      db
+        .from("deals")
+        .select("id, campaign, campaign_status, companies(id, name)")
+        .or(`campaign.ilike.${pattern},notes.ilike.${pattern}`)
+        .order("created_at", { ascending: false })
+        .limit(5)
+    ),
+    rows<ContractSearchRow>(
+      db
+        .from("contracts")
+        .select("id, creator_id, contract_type, contract_status, creators(id, creator_name)")
+        .or(`contract_type.ilike.${pattern},contract_status.ilike.${pattern},notes.ilike.${pattern}`)
+        .order("created_at", { ascending: false })
+        .limit(5)
+    ),
+    rows<OutreachSearchRow>(
+      db
+        .from("outreach")
+        .select("id, creator_id, contact_method, current_status, creators(id, creator_name)")
+        .or(`contact_method.ilike.${pattern},current_status.ilike.${pattern},notes.ilike.${pattern}`)
+        .order("created_at", { ascending: false })
+        .limit(5)
+    ),
+  ]);
+
+  const creatorIds = creatorRows.map((creator) => creator.id);
+  let linkedDeals: DealSearchRow[] = [];
+  let linkedContracts: ContractSearchRow[] = [];
+  let linkedOutreach: OutreachSearchRow[] = [];
+
+  if (creatorIds.length > 0) {
+    [linkedDeals, linkedContracts, linkedOutreach] = await Promise.all([
+      rows<DealSearchRow>(
+        db
+          .from("deals")
+          .select("id, campaign, campaign_status, companies(id, name), deal_creators!inner(creator_id)")
+          .in("deal_creators.creator_id", creatorIds)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      ),
+      rows<ContractSearchRow>(
+        db
+          .from("contracts")
+          .select("id, creator_id, contract_type, contract_status, creators(id, creator_name)")
+          .in("creator_id", creatorIds)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      ),
+      rows<OutreachSearchRow>(
+        db
+          .from("outreach")
+          .select("id, creator_id, contact_method, current_status, creators(id, creator_name)")
+          .in("creator_id", creatorIds)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      ),
+    ]);
+  }
+
+  const creators = creatorRows.map<GlobalSearchItem>((creator) => ({
+    id: creator.id,
+    type: "creator",
+    title: creator.creator_name,
+    subtitle: joinMeta([creator.niche, creator.email, creator.instagram ? `@${creator.instagram}` : null]),
+    href: `/creators/${creator.id}`,
+  }));
+
+  const companies = companyRows.map<GlobalSearchItem>((company) => ({
+    id: company.id,
+    type: "company",
+    title: company.name,
+    subtitle: joinMeta([company.industry, company.domain]),
+    href: "/companies",
+  }));
+
+  const deals = dedupeById([...dealRows, ...linkedDeals]).map<GlobalSearchItem>((deal) => ({
+    id: deal.id,
+    type: "deal",
+    title: deal.campaign || "Untitled deal",
+    subtitle: joinMeta([deal.companies?.name, deal.campaign_status]),
+    href: "/deals",
+  }));
+
+  const contracts = dedupeById([...contractRows, ...linkedContracts]).map<GlobalSearchItem>((contract) => ({
+    id: contract.id,
+    type: "contract",
+    title: contract.creators?.creator_name
+      ? `Contract for ${contract.creators.creator_name}`
+      : "Contract",
+    subtitle: joinMeta([contract.contract_type, contract.contract_status]),
+    href: "/contracts",
+  }));
+
+  const outreach = dedupeById([...outreachRows, ...linkedOutreach]).map<GlobalSearchItem>((row) => ({
+    id: row.id,
+    type: "outreach",
+    title: row.creators?.creator_name ? `Outreach for ${row.creators.creator_name}` : "Outreach",
+    subtitle: joinMeta([row.contact_method, row.current_status]),
+    href: "/outreach",
+  }));
+
+  const groups = (
+    [
+      { type: "creator", label: "Creators", items: creators },
+      { type: "company", label: "Companies", items: companies },
+      { type: "deal", label: "Deals", items: deals },
+      { type: "contract", label: "Contracts", items: contracts },
+      { type: "outreach", label: "Outreach", items: outreach },
+    ] satisfies GlobalSearchGroup[]
+  ).filter((group) => group.items.length > 0);
+
+  return {
+    query,
+    groups,
+    total: groups.reduce((sum, group) => sum + group.items.length, 0),
+  };
+}
+
 // ---------- Dropdown options ----------
 
 function assertDropdownField(fieldKey: string): asserts fieldKey is DropdownFieldKey {
@@ -596,7 +1018,7 @@ export async function listDropdownOptions(): Promise<Record<DropdownFieldKey, st
 }
 
 export async function createDropdownOption(fieldKey: string, rawValue: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
   assertDropdownField(fieldKey);
   const value = normalizeOptionValue(rawValue);
   await assertNoDuplicate(fieldKey, value);
@@ -606,14 +1028,26 @@ export async function createDropdownOption(fieldKey: string, rawValue: string) {
   );
   const nextOrder = (latest[0]?.sort_order ?? -1) + 1;
 
-  const { error } = await db.from("dropdown_options").insert({ field_key: fieldKey, value, sort_order: nextOrder });
+  const { data, error } = await db
+    .from("dropdown_options")
+    .insert({ field_key: fieldKey, value, sort_order: nextOrder })
+    .select("id")
+    .single();
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "dropdown_option",
+    entityId: (data as { id: string }).id,
+    entityLabel: `${fieldKey}: ${value}`,
+    changes: { created: { field_key: fieldKey, value } },
+  });
   revalidateAll();
   revalidatePath("/settings/dropdowns");
 }
 
 export async function renameDropdownOption(fieldKey: string, oldValue: string, newValue: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
   assertDropdownField(fieldKey);
   const value = normalizeOptionValue(newValue);
   await assertNoDuplicate(fieldKey, value, oldValue);
@@ -634,12 +1068,19 @@ export async function renameDropdownOption(fieldKey: string, oldValue: string, n
     .eq("field_key", fieldKey)
     .eq("value", oldValue);
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "dropdown_option",
+    entityLabel: `${fieldKey}: ${value}`,
+    changes: { changed: { field_key: fieldKey, from: oldValue, to: value } },
+  });
   revalidateAll();
   revalidatePath("/settings/dropdowns");
 }
 
 export async function deleteDropdownOption(fieldKey: string, value: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
   assertDropdownField(fieldKey);
 
   const { table, column } = DROPDOWN_FIELDS[fieldKey];
@@ -656,6 +1097,13 @@ export async function deleteDropdownOption(fieldKey: string, value: string) {
     .eq("field_key", fieldKey)
     .eq("value", value);
   if (deleteError) fail(deleteError);
+  await writeAuditLog({
+    actorId,
+    action: "delete",
+    entityType: "dropdown_option",
+    entityLabel: `${fieldKey}: ${value}`,
+    changes: { deleted: { field_key: fieldKey, value } },
+  });
   revalidateAll();
   revalidatePath("/settings/dropdowns");
 }
@@ -691,9 +1139,16 @@ export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
 }
 
 export async function updateWorkspaceName(workspaceId: string, name: string) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Workspace name cannot be empty");
+
+  const { data: before, error: fetchError } = await db
+    .from("workspaces")
+    .select("name")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (fetchError) fail(fetchError);
 
   const { error } = await db
     .from("workspaces")
@@ -701,11 +1156,19 @@ export async function updateWorkspaceName(workspaceId: string, name: string) {
     .eq("id", workspaceId);
   if (error) fail(error);
 
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "workspace",
+    entityId: workspaceId,
+    entityLabel: trimmed,
+    changes: { changed: { name: { from: before?.name ?? null, to: trimmed } } },
+  });
   revalidatePath("/settings");
 }
 
 export async function setUserRole(userId: string, role: SettingsRole) {
-  await requireAdmin();
+  const actorId = await requireAdmin();
 
   if (!["admin", "member", "viewer"].includes(role)) {
     throw new Error("Invalid role");
@@ -715,11 +1178,85 @@ export async function setUserRole(userId: string, role: SettingsRole) {
   // preserve any other keys already stored there.
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
+  const previousRole = (user.publicMetadata?.role as string) || "member";
   await client.users.updateUser(userId, {
     publicMetadata: { ...(user.publicMetadata ?? {}), role },
   });
 
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "user",
+    entityId: userId,
+    entityLabel: name || user.emailAddresses[0]?.emailAddress || userId,
+    changes: { changed: { role: { from: previousRole, to: role } } },
+  });
+
   revalidatePath("/settings/team");
+}
+
+// ---------- Audit logs ----------
+
+export type AuditLogRow = {
+  id: string;
+  actor_id: string | null;
+  actor_name: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  entity_label: string | null;
+  changes: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AuditLogFilters = {
+  action?: string;
+  entityType?: string;
+  query?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type AuditLogPage = {
+  rows: AuditLogRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export async function listAuditLogs(filters: AuditLogFilters = {}): Promise<AuditLogPage> {
+  await requireAdmin();
+
+  const page = Math.max(1, Math.floor(filters.page ?? 1));
+  const pageSize = Math.min(100, Math.max(10, Math.floor(filters.pageSize ?? 30)));
+
+  let query = db.from("audit_logs").select("*", { count: "exact" });
+
+  if (filters.action) query = query.eq("action", filters.action);
+  if (filters.entityType) query = query.eq("entity_type", filters.entityType);
+
+  const search = filters.query?.trim();
+  if (search) {
+    const safe = search.replace(/[,()%'"]/g, " ").replace(/\s+/g, " ").trim();
+    if (safe) {
+      query = query.or(`actor_name.ilike.%${safe}%,entity_label.ilike.%${safe}%,entity_type.ilike.%${safe}%`);
+    }
+  }
+
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+
+  if (error) fail(error);
+
+  return {
+    rows: (data ?? []) as AuditLogRow[],
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
 }
 
 // ---------- Notification preferences ----------
@@ -791,13 +1328,13 @@ function normalizeFilter(row: CustomFilterRecord): CustomFilter {
   };
 }
 
-async function assertCanEditFilter(row: CustomFilterRecord) {
+async function assertCanEditFilter(row: CustomFilterRecord): Promise<string> {
   if (row.visibility === "org") {
-    await requireAdmin();
-    return;
+    return requireAdmin();
   }
   const userId = await requireUser();
   if (row.created_by !== userId) throw new Error("You can only modify your own filters");
+  return userId;
 }
 
 export async function listCustomFilters(): Promise<CustomFilter[]> {
@@ -823,13 +1360,25 @@ export async function createCustomFilter(input: {
   if (input.visibility === "org") await requireAdmin();
 
   await ensureUserRow(userId);
-  const { error } = await db.from("custom_filters").insert({
-    name,
-    visibility: input.visibility,
-    conditions: input.conditions,
-    created_by: userId,
-  });
+  const { data, error } = await db
+    .from("custom_filters")
+    .insert({
+      name,
+      visibility: input.visibility,
+      conditions: input.conditions,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
   if (error) fail(error);
+  await writeAuditLog({
+    actorId: userId,
+    action: "create",
+    entityType: "custom_filter",
+    entityId: (data as { id: string }).id,
+    entityLabel: name,
+    changes: { created: { name, visibility: input.visibility, conditions: input.conditions } },
+  });
 }
 
 export async function updateCustomFilter(
@@ -844,7 +1393,7 @@ export async function updateCustomFilter(
   const { data, error: fetchError } = await db.from("custom_filters").select("*").eq("id", id).single();
   if (fetchError || !data) throw new Error("Filter not found");
   const existing = data as CustomFilterRecord;
-  await assertCanEditFilter(existing);
+  const actorId = await assertCanEditFilter(existing);
   if (input.visibility === "org" && existing.visibility !== "org") await requireAdmin();
 
   const { error } = await db
@@ -852,14 +1401,37 @@ export async function updateCustomFilter(
     .update({ name, visibility: input.visibility, conditions: input.conditions, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "custom_filter",
+    entityId: id,
+    entityLabel: name,
+    changes: {
+      changed: diffValues(existing as unknown as Record<string, unknown>, {
+        name,
+        visibility: input.visibility,
+        conditions: input.conditions,
+      }),
+    },
+  });
 }
 
 export async function deleteCustomFilter(id: string) {
   const { data, error: fetchError } = await db.from("custom_filters").select("*").eq("id", id).single();
   if (fetchError || !data) throw new Error("Filter not found");
-  await assertCanEditFilter(data as CustomFilterRecord);
+  const existing = data as CustomFilterRecord;
+  const actorId = await assertCanEditFilter(existing);
   const { error } = await db.from("custom_filters").delete().eq("id", id);
   if (error) fail(error);
+  await writeAuditLog({
+    actorId,
+    action: "delete",
+    entityType: "custom_filter",
+    entityId: id,
+    entityLabel: existing.name,
+    changes: { deleted: existing },
+  });
 }
 
 // ---------- Table view preferences ----------

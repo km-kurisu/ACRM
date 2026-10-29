@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings, Users, FileSpreadsheet, Building2 } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
 import ThemeToggle from "@/components/ThemeToggle";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { StatusSelector } from "@/components/StatusSelector";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
+          <div className="pb-4">
+            <GlobalSearch keyboardShortcut />
+          </div>
           <p className="px-3 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Menu
           </p>
@@ -131,7 +135,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <span>AnimeCRM</span>
           </Link>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <GlobalSearch variant="icon" />
+          <ThemeToggle />
+        </div>
       </header>
 
       {/* Main content */}

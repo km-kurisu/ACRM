@@ -18,6 +18,7 @@ import { MGMT_COLORS, PRIORITY_COLORS } from "@/lib/colors";
 import { CustomFilterPicker, useActiveFilterIds } from "@/components/custom-filter-picker";
 import { matchesFilter, type CustomFilter } from "@/lib/custom-filters";
 import { textColumn, type DataColumn } from "@/components/data-table-columns";
+import { ImportExportMenu } from "@/components/import-export-menu";
 
 function followerCount(value: number | null | undefined) {
   return value != null && value > 0 ? value.toLocaleString("en-IN") : "—";
@@ -150,11 +151,14 @@ function CreatorsInner() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Creators</h1>
-        <p className="mt-1 text-muted-foreground">
-          {loaded ? `${rows.length} creator${rows.length === 1 ? "" : "s"} in the roster.` : "Loading creators…"}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Creators</h1>
+          <p className="mt-1 text-muted-foreground">
+            {loaded ? `${rows.length} creator${rows.length === 1 ? "" : "s"} in the roster.` : "Loading creators…"}
+          </p>
+        </div>
+        <ImportExportMenu rows={filtered} fileName="creators" />
       </div>
 
       <Card className="glass flex min-h-0 flex-1 flex-col">
