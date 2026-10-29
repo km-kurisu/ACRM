@@ -44,6 +44,7 @@ import {
 import { listCustomFilters } from "@/actions";
 import { CustomFilterPicker, useActiveFilterIds } from "@/components/custom-filter-picker";
 import { matchesFilter, type CustomFilter } from "@/lib/custom-filters";
+import { ImportExportMenu } from "@/components/import-export-menu";
 
 const TABLE_KEY = "master_data";
 
@@ -281,13 +282,15 @@ function MasterDataInner() {
               : "Loading registry…"}
           </p>
         </div>
-        <Dialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) resetForm();
-          }}
-        >
+        <div className="flex flex-wrap items-center gap-2">
+          <ImportExportMenu rows={filtered} canImport={isAdmin} onImported={refresh} fileName="creators-master-data" />
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetForm();
+            }}
+          >
           {isAdmin && (
             <DialogTrigger asChild>
               <Button className="glass" variant="secondary">
@@ -314,7 +317,8 @@ function MasterDataInner() {
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       <Card className="glass flex min-h-0 flex-1 flex-col">

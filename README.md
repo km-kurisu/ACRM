@@ -30,6 +30,7 @@ Whether you're scouting cosplay creators on Instagram or managing a multi-creato
 ### Creator Management
 - Full CRUD for anime content creators with 25+ fields (social handles, followers, engagement rates, niche, location, payment details)
 - Read-only **Creators** table for browsing, plus a spreadsheet-like **Master Data** view for admins
+- Bulk import creators from CSV or Excel, and export the current view to CSV or Excel
 - Individual creator detail pages with linked outreach, contracts, and deals
 
 ### Brand Deal Pipeline
