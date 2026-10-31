@@ -79,16 +79,26 @@ Whether you're scouting cosplay creators on Instagram or managing a multi-creato
 
 ### Role-Based Access Control (RBAC)
 - Built-in roles: **Admin**, **Member**, **Viewer**, plus admin-created custom roles
+- Admins can configure custom-role permissions and workspace access from **Settings > Roles**
+- Admins can assign built-in or custom roles from **Settings > Team Members**
 - Server-side enforcement via Clerk JWT metadata + Supabase Row Level Security
 - Client-side UI hiding of write actions for non-admins
 - Admin-only team management at `/settings/team`
 
+### Organization Membership
+- Every newly synchronized Clerk user is automatically added to the **OtakuMantra** organization
+- Existing memberships are detected and preserved without duplication
+- Configure `CLERK_OTAKUMANTRA_ORGANIZATION_ID` when the organization cannot be resolved by its exact name
+
 ### Presence System
 - Discord-style user status (Active, Inactive, Offline, Invisible)
-- Manual status selector in the sidebar
+- Manual status selector in **Settings > Appearance** and the profile controls
+- Automatic heartbeat updates activity timestamps every 30 seconds
+- Team avatars and initials with visibility indicators are shown in the navigation
 
 ### Theme
-- Light and dark mode with localStorage persistence
+- Mono is the default palette and starts in dark mode
+- Light/dark mode switching is available from **Settings > Appearance**
 - Flash-free loading via inline script
 
 ---
@@ -168,12 +178,12 @@ anime-agency-crm/
 
 ## Database Schema
 
-AniCRM uses **12 Supabase tables** with Row Level Security:
+AniCRM uses **14 Supabase tables** with Row Level Security:
 
 | Table | Purpose |
 |-------|---------|
 | `users` | Mirror of Clerk users with roles (admin/member/viewer) |
-| `custom_roles` | Admin-created role names available for team assignment |
+| `custom_roles` | Admin-created roles with permissions and workspace access |
 | `creators` | Anime content creators (master data) |
 | `outreach` | Communication/contact history per creator |
 | `contracts` | Management contracts with creators |
@@ -181,8 +191,9 @@ AniCRM uses **12 Supabase tables** with Row Level Security:
 | `company_contacts` | Contact people per company |
 | `deals` | Brand deals with campaign and financial tracking |
 | `deal_creators` | Many-to-many: deals <-> creators |
-| `workspaces` | Workspace support (future-proofed) |
-| `user_status` | Presence/status tracking |
+| `workspaces` | Workspace definitions |
+| `workspace_members` | User-to-workspace memberships |
+| `user_status` | Presence/status tracking and activity timestamps |
 | `user_preferences` | Per-user notification preferences |
 | `custom_filters` | Saved filter presets |
 | `dropdown_options` | Admin-editable enum values (13 field keys) |
@@ -234,6 +245,7 @@ In the **Clerk Dashboard**:
 
 1. Go to **Sessions** > **Token** and add `"metadata": "{{user.public_metadata}}"` to the session token template
 2. Set up **Supabase** as a native third-party auth provider (so Clerk JWTs work with Supabase RLS)
+3. Create an organization named **OtakuMantra**. New users are added automatically after synchronization.
 
 ### 5. Set up the database
 
@@ -290,6 +302,9 @@ The first user to sign up needs the `admin` role. Either:
 | Manage settings | Yes | No | No |
 | Manage team members | Yes | No | No |
 | Edit dropdown options | Yes | No | No |
+| Configure custom roles and workspace access | Yes | No | No |
+
+Custom roles use the permissions selected by an admin and are restricted to their selected workspaces. Users without a custom permission configuration retain the standard Member permissions.
 
 Enforcement happens at three levels:
 1. **Server Actions** - `requireAdmin()` checks Clerk JWT metadata
