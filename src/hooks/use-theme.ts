@@ -9,10 +9,10 @@ export type Theme = "light" | "dark";
 export type ColorTheme = "default" | "tokyo" | "sakura";
 
 function getTheme(): Theme {
-  if (typeof window === "undefined") return "light";
+  if (typeof window === "undefined") return "dark";
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "dark";
 }
 
 function getColorTheme(): ColorTheme {
@@ -43,7 +43,7 @@ function subscribe(callback: () => void) {
 }
 
 export function useTheme(): Theme {
-  return useSyncExternalStore(subscribe, getTheme, () => "light");
+  return useSyncExternalStore(subscribe, getTheme, () => "dark");
 }
 
 export function useColorTheme(): ColorTheme {

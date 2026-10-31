@@ -14,6 +14,7 @@ export type AuditEntity =
   | "dropdown_option"
   | "workspace"
   | "user"
+  | "custom_role"
   | "custom_filter";
 
 export type AuditLogInput = {

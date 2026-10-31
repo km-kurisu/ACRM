@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { setPresenceStatus } from "@/actions";
+import { heartbeatPresence, setPresenceStatus } from "@/actions";
 import type { PresenceStatus } from "@/lib/presence";
 import {
   Select,
@@ -24,6 +24,13 @@ export function StatusSelector({ className }: { className?: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const heartbeat = () => {
+      heartbeatPresence().catch((error) => {
+        console.error("Failed to update presence heartbeat:", error);
+      });
+    };
+    heartbeat();
+    const heartbeatTimer = window.setInterval(heartbeat, 30_000);
     fetch("/api/presence")
       .then((r) => r.json())
       .then((data) => {
@@ -35,6 +42,7 @@ export function StatusSelector({ className }: { className?: string }) {
       })
       .catch(() => setStatus("active"))
       .finally(() => setLoading(false));
+    return () => window.clearInterval(heartbeatTimer);
   }, []);
 
   const handleChange = async (value: string) => {

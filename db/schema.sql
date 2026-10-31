@@ -24,6 +24,18 @@ create table if not exists public.users (
     updated_at timestamp with time zone not null default timezone('utc'::text, now())
 );
 
+create table if not exists public.custom_roles (
+    id uuid primary key default gen_random_uuid(),
+    name text not null unique,
+    description text,
+    permissions jsonb not null default '[]'::jsonb,
+    workspace_ids uuid[] not null default '{}'::uuid[],
+    created_by text not null references public.users(id) on delete restrict,
+    created_at timestamp with time zone not null default timezone('utc'::text, now())
+);
+alter table public.custom_roles add column if not exists permissions jsonb not null default '[]'::jsonb;
+alter table public.custom_roles add column if not exists workspace_ids uuid[] not null default '{}'::uuid[];
+
 -- ------------------------------------------------------------
 -- creators — Master Data sheet
 -- ------------------------------------------------------------

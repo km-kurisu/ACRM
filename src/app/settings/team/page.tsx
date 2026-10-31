@@ -1,6 +1,7 @@
 import React from "react";
 import { clerkClient } from "@clerk/nextjs/server";
 import { requireAdmin } from "@/lib/rbac-server";
+import { listCustomRoles } from "@/actions";
 import {
   Card,
   CardHeader,
@@ -26,6 +27,7 @@ export default async function TeamPage() {
       "?",
     role: ((user.publicMetadata?.role as string) || "member") as TeamMember["role"],
   }));
+  const customRoles = await listCustomRoles();
 
   return (
     <div>
@@ -42,7 +44,7 @@ export default async function TeamPage() {
         <CardContent>
           <div className="space-y-4">
             {members.map((member) => (
-              <TeamMemberRow key={member.id} member={member} />
+              <TeamMemberRow key={member.id} member={member} customRoles={customRoles} />
             ))}
           </div>
         </CardContent>

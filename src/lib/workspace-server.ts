@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { db } from "./server";
 import { DEFAULT_WORKSPACE_ID } from "./presence";
+import { clerkClient } from "@clerk/nextjs/server";
 
 export const WORKSPACE_COOKIE = "active_workspace";
 
@@ -21,6 +22,20 @@ async function fetchWorkspaces(ids: string[]): Promise<WorkspaceOption[]> {
 }
 
 export async function listWorkspacesForUser(userId: string): Promise<WorkspaceOption[]> {
+  const client = await clerkClient();
+  const clerkUser = await client.users.getUser(userId);
+  const role = clerkUser.publicMetadata?.role;
+  if (typeof role === "string" && !["admin", "member", "viewer"].includes(role)) {
+    const { data: customRole, error: roleError } = await db
+      .from("custom_roles")
+      .select("workspace_ids")
+      .eq("name", role)
+      .maybeSingle();
+    if (roleError) throw new Error(roleError.message);
+    const workspaceIds = (customRole?.workspace_ids as string[] | null) ?? [];
+    if (workspaceIds.length > 0) return fetchWorkspaces(workspaceIds);
+  }
+
   const { data, error } = await db
     .from("workspace_members")
     .select("workspace_id")

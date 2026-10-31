@@ -9,29 +9,11 @@ import {
   OrganizationSwitcher,
   useOrganization,
 } from "@clerk/nextjs";
+import { ALL_PERMISSIONS, type Permission } from "@/lib/permissions";
 
-export type UserRole = "admin" | "member" | "viewer";
-
-export type Permission =
-  | "creators:view"
-  | "creators:edit"
-  | "creators:delete"
-  | "outreach:view"
-  | "outreach:edit"
-  | "outreach:delete"
-  | "contracts:view"
-  | "contracts:edit"
-  | "contracts:delete"
-  | "companies:view"
-  | "companies:edit"
-  | "companies:delete"
-  | "deals:view"
-  | "deals:edit"
-  | "deals:delete"
-  | "dashboard:view"
-  | "settings:manage"
-  | "members:invite"
-  | "members:manage";
+export type UserRole = "admin" | "member" | "viewer" | (string & {});
+export type { Permission };
+export { ALL_PERMISSIONS };
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -96,8 +78,15 @@ export function useRole(): UserRole | undefined {
 
 export function usePermissions(): Permission[] {
   const role = useRole();
+  const { user } = useUser();
   if (!role) return [];
-  return ROLE_PERMISSIONS[role] || [];
+  const customPermissions = user?.publicMetadata?.rolePermissions;
+  if (role !== "admin" && Array.isArray(customPermissions)) {
+    return customPermissions.filter((permission): permission is Permission =>
+      ALL_PERMISSIONS.some((item) => item.value === permission)
+    );
+  }
+  return ROLE_PERMISSIONS[role as "admin" | "member" | "viewer"] || ROLE_PERMISSIONS.member;
 }
 
 export function useHasPermission(permission: Permission): boolean {
@@ -112,7 +101,8 @@ export const RoleGuard: React.FC<{
   const role = useRole();
   if (!role) return null;
   const order: UserRole[] = ["viewer", "member", "admin"];
-  if (order.indexOf(role) < order.indexOf(minimumRole)) return null;
+  const effectiveRole = role === "admin" || role === "viewer" ? role : "member";
+  if (order.indexOf(effectiveRole) < order.indexOf(minimumRole)) return null;
   return <>{children}</>;
 };
 

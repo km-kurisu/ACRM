@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={cn("h-full", "font-sans", geist.variable)} suppressHydrationWarning>
       <head>
         <InlineScript
-          html={`(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark"){document.documentElement.classList.add(t);}var c=localStorage.getItem("theme-color");if(c==="tokyo"||c==="sakura"){document.documentElement.classList.add("theme-"+c);}}catch(e){}})();`}
+          html={`(function(){try{var t=localStorage.getItem("theme");document.documentElement.classList.add(t==="light"?"light":"dark");var c=localStorage.getItem("theme-color");if(c==="tokyo"||c==="sakura"){document.documentElement.classList.add("theme-"+c);}}catch(e){}})();`}
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">

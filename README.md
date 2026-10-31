@@ -78,7 +78,7 @@ Whether you're scouting cosplay creators on Instagram or managing a multi-creato
 - Apply filters across Dashboard, Creators, and Master Data views
 
 ### Role-Based Access Control (RBAC)
-- Three roles: **Admin**, **Member**, **Viewer**
+- Built-in roles: **Admin**, **Member**, **Viewer**, plus admin-created custom roles
 - Server-side enforcement via Clerk JWT metadata + Supabase Row Level Security
 - Client-side UI hiding of write actions for non-admins
 - Admin-only team management at `/settings/team`
@@ -173,6 +173,7 @@ AniCRM uses **12 Supabase tables** with Row Level Security:
 | Table | Purpose |
 |-------|---------|
 | `users` | Mirror of Clerk users with roles (admin/member/viewer) |
+| `custom_roles` | Admin-created role names available for team assignment |
 | `creators` | Anime content creators (master data) |
 | `outreach` | Communication/contact history per creator |
 | `contracts` | Management contracts with creators |
@@ -223,6 +224,7 @@ Required variables:
 |----------|-----------------|
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk Dashboard > API Keys |
 | `CLERK_SECRET_KEY` | Clerk Dashboard > API Keys |
+| `CLERK_OTAKUMANTRA_ORGANIZATION_ID` | Clerk organization ID for the OtakuMantra organization (optional when the exact organization name is discoverable) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Dashboard > Settings > API |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Dashboard > Settings > API |
 

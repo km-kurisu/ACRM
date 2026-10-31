@@ -1,6 +1,40 @@
 import { clerkClient } from "@clerk/nextjs/server";
 import { db } from "./server";
 
+async function ensureOtakuMantraMembership(userId: string): Promise<void> {
+  const client = await clerkClient();
+  const configuredOrganizationId = process.env.CLERK_OTAKUMANTRA_ORGANIZATION_ID;
+  const organizations = configuredOrganizationId
+    ? await client.organizations.getOrganizationList({
+        organizationId: [configuredOrganizationId],
+        limit: 1,
+      })
+    : await client.organizations.getOrganizationList({
+        query: "OtakuMantra",
+        limit: 10,
+      });
+  const organization = organizations.data.find((item) => item.name === "OtakuMantra");
+
+  if (!organization) {
+    throw new Error(
+      'Clerk organization "OtakuMantra" was not found. Set CLERK_OTAKUMANTRA_ORGANIZATION_ID or create the organization.'
+    );
+  }
+
+  const memberships = await client.organizations.getOrganizationMembershipList({
+    organizationId: organization.id,
+    userId: [userId],
+    limit: 1,
+  });
+  if (memberships.data.length > 0) return;
+
+  await client.organizations.createOrganizationMembership({
+    organizationId: organization.id,
+    userId,
+    role: "org:member",
+  });
+}
+
 /**
  * Ensures a mirror row exists in public.users for the given Clerk user.
  * The schema's FKs (user_status, user_preferences, owner_id columns) all
@@ -8,6 +42,8 @@ import { db } from "./server";
  * writers call this before inserting into FK-bound tables.
  */
 export async function ensureUserRow(userId: string): Promise<void> {
+  await ensureOtakuMantraMembership(userId);
+
   const { data: existing } = await db
     .from("users")
     .select("id")

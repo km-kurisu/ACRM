@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { toast } from "sonner";
-import { setUserRole, type SettingsRole } from "@/actions";
+import { setUserRole, type CustomRole, type SettingsRole } from "@/actions";
 import {
   Select,
   SelectContent,
@@ -19,13 +19,13 @@ export type TeamMember = {
   role: SettingsRole;
 };
 
-const ROLES: { value: SettingsRole; label: string; hint: string }[] = [
+const BUILT_IN_ROLES: { value: SettingsRole; label: string; hint: string }[] = [
   { value: "admin", label: "Admin", hint: "Full read/write/delete on all data" },
   { value: "member", label: "Member", hint: "Can create and edit records" },
   { value: "viewer", label: "Viewer", hint: "Read-only access" },
 ];
 
-export function TeamMemberRow({ member }: { member: TeamMember }) {
+export function TeamMemberRow({ member, customRoles }: { member: TeamMember; customRoles: CustomRole[] }) {
   const [role, setRole] = useState<SettingsRole>(member.role);
   const [saving, setSaving] = useState(false);
 
@@ -45,6 +45,15 @@ export function TeamMemberRow({ member }: { member: TeamMember }) {
     }
   };
 
+  const roles = [
+    ...BUILT_IN_ROLES,
+    ...customRoles.map((customRole) => ({
+      value: customRole.name,
+      label: customRole.name,
+      hint: customRole.description || "Custom role with member access",
+    })),
+  ];
+
   return (
     <div className="flex items-center justify-between rounded-lg border border-border/40 p-4">
       <div className="flex items-center gap-4">
@@ -62,7 +71,7 @@ export function TeamMemberRow({ member }: { member: TeamMember }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ROLES.map((r) => (
+            {roles.map((r) => (
               <SelectItem key={r.value} value={r.value}>
                 {r.label}
               </SelectItem>
@@ -70,7 +79,7 @@ export function TeamMemberRow({ member }: { member: TeamMember }) {
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
-          {ROLES.find((r) => r.value === role)?.hint}
+          {roles.find((r) => r.value === role)?.hint}
         </span>
       </div>
     </div>
