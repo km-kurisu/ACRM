@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { heartbeatPresence, setPresenceStatus } from "@/actions";
 import type { PresenceStatus } from "@/lib/presence";
 import {
@@ -19,9 +19,18 @@ const STATUS_OPTIONS: { value: PresenceStatus; label: string; color: string }[] 
   { value: "invisible", label: "Invisible", color: "bg-purple-500" },
 ];
 
+const subscribeToMount = () => () => {};
+const getClientMountSnapshot = () => true;
+const getServerMountSnapshot = () => false;
+
 export function StatusSelector({ className }: { className?: string }) {
   const [status, setStatus] = useState<PresenceStatus>("active");
   const [loading, setLoading] = useState(true);
+  const mounted = useSyncExternalStore(
+    subscribeToMount,
+    getClientMountSnapshot,
+    getServerMountSnapshot
+  );
 
   useEffect(() => {
     const heartbeat = () => {
@@ -44,6 +53,10 @@ export function StatusSelector({ className }: { className?: string }) {
       .finally(() => setLoading(false));
     return () => window.clearInterval(heartbeatTimer);
   }, []);
+
+  if (!mounted) {
+    return <div aria-hidden className={cn("h-8 w-[130px] rounded-lg border border-input opacity-50", className)} />;
+  }
 
   const handleChange = async (value: string) => {
     const newStatus = value as PresenceStatus;

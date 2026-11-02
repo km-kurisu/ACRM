@@ -2,6 +2,7 @@
 
 import React from "react";
 import ThemeToggle from "@/components/ThemeToggle";
+import { ThemePicker } from "@/components/ThemePicker";
 import { StatusSelector } from "@/components/StatusSelector";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -13,10 +14,12 @@ export default function AppearancePage() {
         <CardHeader>
           <CardTitle>Theme</CardTitle>
           <CardDescription>
-            Mono uses dark mode by default. Switch between light and dark mode anytime.
+            Pick a palette, then switch between light and dark mode.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <ThemePicker />
+          <Separator />
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Mode</span>
             <ThemeToggle />
