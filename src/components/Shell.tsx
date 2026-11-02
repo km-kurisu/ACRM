@@ -1,11 +1,12 @@
 "use client";
 
 import React from "react";
+import { useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Handshake, Megaphone, FileText, Sparkles, Menu, Database, Origami, Settings, Users, FileSpreadsheet, Building2 } from "lucide-react";
 import { UserButton } from "@/lib/rbac";
-import ThemeToggle from "@/components/ThemeToggle";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { StatusSelector } from "@/components/StatusSelector";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,6 +15,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import { syncCurrentUser } from "@/actions";
+import { TeamPresence } from "@/components/TeamPresence";
 
 
 const NAV = [
@@ -30,6 +33,14 @@ const NAV = [
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { isSignedIn } = useUser();
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    syncCurrentUser().catch((error) => {
+      console.error("Failed to synchronize the current Clerk user:", error);
+    });
+  }, [isSignedIn]);
 
   return (
     <div className="relative min-h-screen">
@@ -73,13 +84,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <div className="mt-6 border-t border-border/40 pt-4">
+            <TeamPresence />
+          </div>
         </nav>
 
         <div className="space-y-3 border-t border-border/40 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-muted-foreground">Theme</span>
-            <ThemeToggle />
-          </div>
           <Separator />
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm text-muted-foreground">Profile</span>
@@ -130,6 +140,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <div className="mt-6">
                 <WorkspaceSwitcher />
               </div>
+              <div className="mt-6 border-t border-border/40 pt-4">
+                <TeamPresence />
+              </div>
               <div className="mt-6 flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
                 <span className="text-sm text-muted-foreground">Profile</span>
                 <div className="flex items-center gap-2">
@@ -145,7 +158,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-1">
           <GlobalSearch variant="icon" />
-          <ThemeToggle />
         </div>
       </header>
 

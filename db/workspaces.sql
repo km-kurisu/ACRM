@@ -7,6 +7,18 @@ insert into public.workspaces (id, name) values
     ('00000000-0000-0000-0000-000000000002', 'Writers Den')
 on conflict do nothing;
 
+create table if not exists public.custom_roles (
+    id uuid primary key default gen_random_uuid(),
+    name text not null unique,
+    description text,
+    permissions jsonb not null default '[]'::jsonb,
+    workspace_ids uuid[] not null default '{}'::uuid[],
+    created_by text not null references public.users(id) on delete restrict,
+    created_at timestamp with time zone not null default timezone('utc'::text, now())
+);
+alter table public.custom_roles add column if not exists permissions jsonb not null default '[]'::jsonb;
+alter table public.custom_roles add column if not exists workspace_ids uuid[] not null default '{}'::uuid[];
+
 create table if not exists public.workspace_members (
     user_id text not null references public.users(id) on delete cascade,
     workspace_id uuid not null references public.workspaces(id) on delete cascade,

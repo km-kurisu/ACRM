@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { setPresenceStatus } from "@/actions";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
+import { heartbeatPresence, setPresenceStatus } from "@/actions";
 import type { PresenceStatus } from "@/lib/presence";
 import {
   Select,
@@ -19,11 +19,27 @@ const STATUS_OPTIONS: { value: PresenceStatus; label: string; color: string }[] 
   { value: "invisible", label: "Invisible", color: "bg-purple-500" },
 ];
 
+const subscribeToMount = () => () => {};
+const getClientMountSnapshot = () => true;
+const getServerMountSnapshot = () => false;
+
 export function StatusSelector({ className }: { className?: string }) {
   const [status, setStatus] = useState<PresenceStatus>("active");
   const [loading, setLoading] = useState(true);
+  const mounted = useSyncExternalStore(
+    subscribeToMount,
+    getClientMountSnapshot,
+    getServerMountSnapshot
+  );
 
   useEffect(() => {
+    const heartbeat = () => {
+      heartbeatPresence().catch((error) => {
+        console.error("Failed to update presence heartbeat:", error);
+      });
+    };
+    heartbeat();
+    const heartbeatTimer = window.setInterval(heartbeat, 30_000);
     fetch("/api/presence")
       .then((r) => r.json())
       .then((data) => {
@@ -35,7 +51,12 @@ export function StatusSelector({ className }: { className?: string }) {
       })
       .catch(() => setStatus("active"))
       .finally(() => setLoading(false));
+    return () => window.clearInterval(heartbeatTimer);
   }, []);
+
+  if (!mounted) {
+    return <div aria-hidden className={cn("h-8 w-[130px] rounded-lg border border-input opacity-50", className)} />;
+  }
 
   const handleChange = async (value: string) => {
     const newStatus = value as PresenceStatus;

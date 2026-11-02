@@ -25,6 +25,7 @@ import { CREATOR_COLUMNS } from "@/lib/creator-spreadsheet";
 import { diffValues, writeAuditLog } from "@/lib/audit";
 import { getActiveWorkspaceId, listWorkspacesForUser, WORKSPACE_COOKIE } from "@/lib/workspace-server";
 import { cookies } from "next/headers";
+import { ALL_PERMISSIONS, type Permission } from "@/lib/permissions";
 
 function fail(error: { message?: string } | null): never {
   throw new Error(error?.message || "Database error");
@@ -1419,18 +1420,53 @@ export async function setPresenceStatus(status: PresenceStatus) {
       user_id: userId,
       workspace_id: workspaceId,
       status_override: status,
+      last_active_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,workspace_id" });
 
   if (error) {
     console.warn("Failed to update presence status:", error.message);
   }
+
+}
+
+export async function heartbeatPresence() {
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  await ensureUserRow(userId);
+  const { data: current, error: currentError } = await db
+    .from("user_status")
+    .select("status_override")
+    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (currentError) throw new Error(currentError.message);
+  const { error } = await db.from("user_status").upsert({
+    user_id: userId,
+    workspace_id: workspaceId,
+    status_override: current?.status_override ?? "active",
+    last_active_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id,workspace_id" });
+  if (error) throw new Error(error.message);
 }
 
 // ---------- Settings ----------
 
-export type SettingsRole = "admin" | "member" | "viewer";
+export async function syncCurrentUser() {
+  const userId = await requireUser();
+  await ensureUserRow(userId);
+}
+
+export type SettingsRole = "admin" | "member" | "viewer" | (string & {});
 export type WorkspaceInfo = { id: string; name: string };
+export type CustomRole = {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: Permission[];
+  workspace_ids: string[];
+};
 
 export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
   const userId = await requireUser();
@@ -1539,7 +1575,20 @@ export async function updateWorkspaceName(workspaceId: string, name: string) {
 export async function setUserRole(userId: string, role: SettingsRole) {
   const actorId = await requireAdmin();
 
-  if (!["admin", "member", "viewer"].includes(role)) {
+  const isBuiltInRole = ["admin", "member", "viewer"].includes(role);
+  let customRole: CustomRole | null = null;
+  if (!isBuiltInRole) {
+    const { data, error } = await db
+      .from("custom_roles")
+      .select("id, name, description, permissions, workspace_ids")
+      .eq("name", role)
+      .maybeSingle();
+    if (error) fail(error);
+    if (!data) throw new Error("Invalid role");
+    customRole = data as CustomRole;
+  }
+
+  if (!role.trim()) {
     throw new Error("Invalid role");
   }
 
@@ -1549,7 +1598,12 @@ export async function setUserRole(userId: string, role: SettingsRole) {
   const user = await client.users.getUser(userId);
   const previousRole = (user.publicMetadata?.role as string) || "member";
   await client.users.updateUser(userId, {
-    publicMetadata: { ...(user.publicMetadata ?? {}), role },
+    publicMetadata: {
+      ...(user.publicMetadata ?? {}),
+      role,
+      rolePermissions: customRole?.permissions ?? null,
+      roleWorkspaceIds: customRole?.workspace_ids ?? null,
+    },
   });
 
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
@@ -1563,6 +1617,192 @@ export async function setUserRole(userId: string, role: SettingsRole) {
   });
 
   revalidatePath("/settings/team");
+}
+
+export async function listCustomRoles(): Promise<CustomRole[]> {
+  await requireAdmin();
+  return rows<CustomRole>(
+    db.from("custom_roles").select("id, name, description, permissions, workspace_ids").order("name")
+  );
+}
+
+export async function createCustomRole(
+  name: string,
+  description: string,
+  permissions: Permission[],
+  workspaceIds: string[]
+): Promise<CustomRole> {
+  const actorId = await requireAdmin();
+  const trimmedName = name.trim();
+  const trimmedDescription = description.trim();
+  if (!trimmedName) throw new Error("Role name cannot be empty");
+  if (trimmedName.length > 50) throw new Error("Role name must be 50 characters or fewer");
+  if (["admin", "member", "viewer"].includes(trimmedName.toLowerCase())) {
+    throw new Error("That name is reserved");
+  }
+  const { data: workspaces, error: workspaceError } = await db
+    .from("workspaces")
+    .select("id")
+    .in("id", workspaceIds);
+  if (workspaceError) fail(workspaceError);
+  if (!workspaceIds.length || workspaces.length !== new Set(workspaceIds).size) {
+    throw new Error("Select at least one valid workspace");
+  }
+  const validPermissions = permissions.filter((permission) =>
+    ALL_PERMISSIONS.some((item) => item.value === permission)
+  );
+
+  const { data, error } = await db
+    .from("custom_roles")
+    .insert({
+      name: trimmedName,
+      description: trimmedDescription || null,
+      permissions: validPermissions,
+      workspace_ids: [...new Set(workspaceIds)],
+      created_by: actorId,
+    })
+    .select("id, name, description")
+    .single();
+  if (error) fail(error);
+
+  await writeAuditLog({
+    actorId,
+    action: "create",
+    entityType: "custom_role",
+    entityId: data.id,
+    entityLabel: data.name,
+    changes: { created: data },
+  });
+  revalidatePath("/settings/roles");
+  revalidatePath("/settings/team");
+  return data as CustomRole;
+}
+
+export async function updateCustomRole(
+  roleId: string,
+  name: string,
+  description: string,
+  permissions: Permission[],
+  workspaceIds: string[]
+): Promise<CustomRole> {
+  const actorId = await requireAdmin();
+  const { data: existingRole, error: existingRoleError } = await db
+    .from("custom_roles")
+    .select("name")
+    .eq("id", roleId)
+    .single();
+  if (existingRoleError) fail(existingRoleError);
+  const trimmedName = name.trim();
+  if (!trimmedName) throw new Error("Role name cannot be empty");
+  if (["admin", "member", "viewer"].includes(trimmedName.toLowerCase())) {
+    throw new Error("That name is reserved");
+  }
+  const { data: workspaces, error: workspaceError } = await db
+    .from("workspaces")
+    .select("id")
+    .in("id", workspaceIds);
+  if (workspaceError) fail(workspaceError);
+  if (!workspaceIds.length || workspaces.length !== new Set(workspaceIds).size) {
+    throw new Error("Select at least one valid workspace");
+  }
+  const validPermissions = permissions.filter((permission) =>
+    ALL_PERMISSIONS.some((item) => item.value === permission)
+  );
+  const { data, error } = await db
+    .from("custom_roles")
+    .update({
+      name: trimmedName,
+      description: description.trim() || null,
+      permissions: validPermissions,
+      workspace_ids: [...new Set(workspaceIds)],
+    })
+    .eq("id", roleId)
+    .select("id, name, description, permissions, workspace_ids")
+    .single();
+  if (error) fail(error);
+
+  const client = await clerkClient();
+  const users = await client.users.getUserList({ limit: 500 });
+  await Promise.all(
+    users.data
+      .filter((user) => user.publicMetadata?.role === existingRole.name)
+      .map((user) =>
+        client.users.updateUser(user.id, {
+          publicMetadata: {
+            ...(user.publicMetadata ?? {}),
+            role: data.name,
+            rolePermissions: validPermissions,
+            roleWorkspaceIds: [...new Set(workspaceIds)],
+          },
+        })
+      )
+  );
+  await writeAuditLog({
+    actorId,
+    action: "update",
+    entityType: "custom_role",
+    entityId: data.id,
+    entityLabel: data.name,
+    changes: { updated: data },
+  });
+  revalidatePath("/settings/roles");
+  revalidatePath("/settings/team");
+  return data as CustomRole;
+}
+
+export type TeamPresence = {
+  id: string;
+  name: string;
+  initials: string;
+  email: string;
+  imageUrl: string | null;
+  status: string;
+  isOnline: boolean;
+};
+
+export async function listTeamPresence(): Promise<TeamPresence[]> {
+  const userId = await requireUser();
+  const workspaceId = await getActiveWorkspaceId(userId);
+  const client = await clerkClient();
+  const allUsers = [];
+  const pageSize = 100;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await client.users.getUserList({ limit: pageSize, offset });
+    allUsers.push(...page.data);
+    if (page.data.length < pageSize) break;
+  }
+  const ids = allUsers.map((user) => user.id);
+  if (ids.length === 0) return [];
+  const { data, error } = await db
+    .from("user_status")
+    .select("user_id, status_override, last_active_at")
+    .eq("workspace_id", workspaceId)
+    .in("user_id", ids);
+  if (error) {
+    console.warn("Failed to load team presence statuses:", error.message);
+  }
+  const statuses = new Map((data ?? []).map((status) => [status.user_id, status]));
+  return allUsers.map((user) => {
+    const status = statuses.get(user.id);
+    const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+    const email = user.emailAddresses[0]?.emailAddress ?? "";
+    return {
+      id: user.id,
+      name: name || "Unnamed user",
+      initials:
+        `${user.firstName?.charAt(0) ?? ""}${user.lastName?.charAt(0) ?? ""}`.toUpperCase() ||
+        email.charAt(0).toUpperCase() ||
+        "?",
+      email,
+      imageUrl: user.imageUrl ?? null,
+      status: status?.status_override === "invisible"
+        ? "invisible"
+        : status && Date.now() - new Date(status.last_active_at).getTime() < 90_000
+          ? status.status_override ?? "active"
+          : "offline",
+      isOnline: Boolean(status && Date.now() - new Date(status.last_active_at).getTime() < 90_000),
+    };
+  });
 }
 
 // ---------- Audit logs ----------
